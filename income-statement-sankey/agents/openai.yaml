@@ -1,0 +1,4 @@
+interface:
+  display_name: "财报收入桑基图"
+  short_description: "自动拉取并核验财报数据，生成固定版式收入与利润流向图"
+  default_prompt: "Use $income-statement-sankey to fetch official earnings data and generate a reference-matched income statement Sankey PNG."

@@ -1,0 +1,153 @@
+{
+  "company": "Apple",
+  "ticker": "AAPL",
+  "period_label": "Q3 FY26",
+  "period_end_label": "Ending June 2026",
+  "period_end": "2026-06-27",
+  "currency": "USD",
+  "unit": "B",
+  "brand": {
+    "logo_text": "AAPL"
+  },
+  "source_records": [
+    {
+      "label": "Apple FY26 Q3 financial statements",
+      "type": "official_ir",
+      "publisher": "Apple Inc.",
+      "retrieved_on": "2026-08-08",
+      "url": "https://www.apple.com/newsroom/pdfs/fy2026q3/FY26_Q3_Consolidated_Financial_Statements.pdf"
+    },
+    {
+      "label": "Apple FY26 Q3 earnings release",
+      "type": "official_ir",
+      "publisher": "Apple Inc.",
+      "retrieved_on": "2026-08-08",
+      "url": "https://www.apple.com/newsroom/2026/07/apple-reports-third-quarter-results/"
+    }
+  ],
+  "segments": [
+    {
+      "name": "iPhone",
+      "revenue": 54.252,
+      "yoy_pct": 21.69,
+      "group": "products"
+    },
+    {
+      "name": "Mac",
+      "revenue": 10.352,
+      "yoy_pct": 28.66,
+      "group": "products",
+      "subtitle": "Air, Pro, Mini"
+    },
+    {
+      "name": "iPad",
+      "revenue": 6.191,
+      "yoy_pct": -5.93,
+      "group": "products"
+    },
+    {
+      "name": "Wearables",
+      "revenue": 7.883,
+      "yoy_pct": 6.47,
+      "group": "products",
+      "subtitle": "Wearables, Home and Accessories"
+    }
+  ],
+  "revenue_groups": [
+    {
+      "id": "products",
+      "name": "Products",
+      "revenue": 78.678,
+      "yoy_pct": 18.11
+    },
+    {
+      "id": "services",
+      "name": "Services",
+      "revenue": 30.739,
+      "yoy_pct": 12.09
+    }
+  ],
+  "products": {
+    "revenue": 78.678,
+    "yoy_pct": 18.11
+  },
+  "services": {
+    "revenue": 30.739,
+    "yoy_pct": 12.09
+  },
+  "total_revenue": {
+    "revenue": 109.417,
+    "yoy_pct": 16.36
+  },
+  "gross_profit": {
+    "amount": 54.77,
+    "margin_pct": 50.06,
+    "margin_yoy_pp": 3.57
+  },
+  "cogs": {
+    "amount": 54.647,
+    "products": 47.153,
+    "products_gm_pct": 40.07,
+    "services": 7.494,
+    "services_gm_pct": 75.62
+  },
+  "operating_profit": {
+    "amount": 35.695,
+    "margin_pct": 32.62,
+    "margin_yoy_pp": 2.63
+  },
+  "opex": {
+    "amount": 19.075,
+    "rd": 11.729,
+    "rd_pct_rev": 10.72,
+    "rd_yoy_pp": 1.29,
+    "sga": 7.346,
+    "sga_pct_rev": 6.71,
+    "sga_yoy_pp": -0.36
+  },
+  "net_profit": {
+    "amount": 29.789,
+    "margin_pct": 27.23,
+    "margin_yoy_pp": 2.3
+  },
+  "tax": 6.478,
+  "other_income": 0.572,
+  "prior_period": {
+    "total_revenue": 94.036,
+    "revenue_groups": [
+      {
+        "id": "products",
+        "revenue": 66.613
+      },
+      {
+        "id": "services",
+        "revenue": 27.423
+      }
+    ],
+    "segments": [
+      {
+        "name": "iPhone",
+        "revenue": 44.582
+      },
+      {
+        "name": "Mac",
+        "revenue": 8.046
+      },
+      {
+        "name": "iPad",
+        "revenue": 6.581
+      },
+      {
+        "name": "Wearables",
+        "revenue": 7.404
+      }
+    ],
+    "gross_profit": 43.718,
+    "operating_profit": 28.202,
+    "net_profit": 23.434,
+    "opex": {
+      "rd": 8.866,
+      "sga": 6.65
+    }
+  }
+}
