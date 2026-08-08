@@ -379,6 +379,14 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         ]
     target_cursor = revenue_top
     group_geometry: dict[str, dict[str, float]] = {}
+    has_segment_column = any(
+        segment.get("revenue") is not None
+        for segment in data.get("segments") or []
+    )
+    # Three or more groups produce bars too tall to stack a four-line label above
+    # each one; the label lands on the bar above it. Place the block beside the
+    # bar instead, which is only viable when no segment column sits to the left.
+    groups_beside = len(groups) >= 3 and not has_segment_column
     for group_index, (group, center) in enumerate(zip(groups, group_centers)):
         group_height = height(group["revenue"], 12)
         group_top = center - group_height / 2
@@ -405,42 +413,52 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
             GRAY,
             0.93,
         )
-        if len(groups) == 2:
-            label_y = 300.0 if group_index == 0 else 760.0
+        if groups_beside:
+            label_x = x_group - 18
+            label_ha = "right"
+            name_y = center - 50
+            amount_y, pct_y, yoy_y = center - 7, center + 26, center + 58
         else:
-            label_y = group_top - 65 if center < 650 else group_top - 54
+            if len(groups) == 2:
+                label_y = 300.0 if group_index == 0 else 760.0
+            else:
+                label_y = group_top - 65 if center < 650 else group_top - 54
+            label_x = x_group + group_width / 2
+            label_ha = "center"
+            name_y = label_y
+            amount_y, pct_y, yoy_y = label_y + 43, label_y + 76, label_y + 108
         ax.text(
-            x_group + group_width / 2,
-            label_y,
+            label_x,
+            name_y,
             group["name"],
-            ha="center",
+            ha=label_ha,
             va="center",
             color=DARK,
             **_font(22, "bold"),
         )
         ax.text(
-            x_group + group_width / 2,
-            label_y + 43,
+            label_x,
+            amount_y,
             _money(group["revenue"], unit),
-            ha="center",
+            ha=label_ha,
             va="center",
             color=DARK,
             **_font(21),
         )
         ax.text(
-            x_group + group_width / 2,
-            label_y + 76,
+            label_x,
+            pct_y,
             _percent(group["revenue"] / revenue * 100, " of revenue"),
-            ha="center",
+            ha=label_ha,
             va="center",
             color=MUTED,
             **_font(14),
         )
         ax.text(
-            x_group + group_width / 2,
-            label_y + 108,
+            label_x,
+            yoy_y,
             _yoy(group.get("yoy_pct")),
-            ha="center",
+            ha=label_ha,
             va="center",
             color=MUTED,
             **_font(15),
@@ -612,7 +630,10 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
     opex_height = height(opex_value)
     operating_top = 365.0
     operating_bottom = operating_top + operating_height
-    opex_top = 590.0
+    # Fixed slot assumes a ~33% operating margin. A very high margin grows the
+    # green bar past it, which would draw the red bar inside the green one and
+    # visually truncate it. Push down only when it would actually collide.
+    opex_top = max(590.0, operating_bottom + 12.0)
     opex_bottom = opex_top + opex_height
     _ribbon(
         ax,
@@ -655,9 +676,16 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         color=MUTED,
         **_font(14),
     )
-    ax.text(1440, 676, "Operating", ha="center", color=RED, **_font(19, "bold"))
-    ax.text(1440, 708, "expenses", ha="center", color=RED, **_font(19, "bold"))
-    ax.text(1440, 748, _money(opex_value, unit, True), ha="center", color=RED, **_font(18))
+    ax.text(1440, opex_top + 86, "Operating", ha="center", color=RED, **_font(19, "bold"))
+    ax.text(1440, opex_top + 118, "expenses", ha="center", color=RED, **_font(19, "bold"))
+    ax.text(
+        1440,
+        opex_top + 158,
+        _money(opex_value, unit, True),
+        ha="center",
+        color=RED,
+        **_font(18),
+    )
 
     product_cogs = cogs.get("products")
     service_cogs = cogs.get("services")
@@ -719,16 +747,57 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
     net_height = height(net_value)
     net_top = 310.0
     net_bottom = net_top + net_height
-    _ribbon(
-        ax,
-        x_operating + operating_width,
-        operating_top,
-        operating_top + min(net_height, operating_height),
-        x_final,
-        net_top,
-        net_bottom,
-        GREEN_FLOW,
-    )
+
+    # Geometry of every outflow leaving the operating bar, resolved before any
+    # ribbon is drawn. The slots must clear both the net-profit bar and the
+    # operating bar: sitting below operating_bottom is what makes the red flows
+    # sweep downward while the green one sweeps up, so the two visually diverge
+    # instead of the red bars being drawn inside the green one.
+    final_cursor = max(net_bottom, operating_bottom) + 8.0
+    has_other = abs(other_value) > 0.05
+    other_height = height(other_value, 10) if has_other else 0.0
+    other_top = max(430.0, final_cursor) if has_other else 0.0
+    if has_other:
+        final_cursor = other_top + other_height + 8.0
+    has_tax = tax_value > 0
+    tax_height = height(tax_value, 11) if has_tax else 0.0
+    tax_top = max(495.0, final_cursor) if has_tax else 0.0
+
+    # Previously every outflow anchored its source to operating_bottom, so the
+    # ribbons overlapped each other (Other sat entirely inside Tax) and all
+    # curved upward across the green band. Partition the bar's right edge into
+    # consecutive disjoint slices instead, ordered by target position: the top
+    # slice (net profit) sweeps up, the lower slices sweep down, and no two
+    # ribbons share a single source pixel.
+    outflows = [(net_top, net_bottom, net_value, GREEN_FLOW)]
+    if has_other:
+        outflows.append(
+            (
+                other_top,
+                other_top + other_height,
+                abs(other_value),
+                GREEN_FLOW if other_value >= 0 else RED_FLOW,
+            )
+        )
+    if has_tax:
+        outflows.append((tax_top, tax_top + tax_height, tax_value, RED_FLOW))
+    outflows.sort(key=lambda item: item[0])
+    outflow_total = sum(item[2] for item in outflows) or 1.0
+    source_cursor = operating_top
+    for target_top, target_bottom, value, color in outflows:
+        slice_height = operating_height * value / outflow_total
+        _ribbon(
+            ax,
+            x_operating + operating_width,
+            source_cursor,
+            source_cursor + slice_height,
+            x_final,
+            target_top,
+            target_bottom,
+            color,
+        )
+        source_cursor += slice_height
+
     _bar(ax, x_final, net_top, final_width, net_height, GREEN_BAR)
     ax.text(1764, 335, "Net profit", ha="left", color=GREEN, **_font(22, "bold"))
     ax.text(1764, 375, _money(net_value, unit), ha="left", color=GREEN, **_font(20))
@@ -742,49 +811,38 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
     )
     ax.text(1764, 444, _pp(net.get("margin_yoy_pp")), ha="left", color=MUTED, **_font(14))
 
-    if abs(other_value) > 0.05:
-        other_height = height(other_value, 10)
-        other_top = 430.0
-        flow_color = GREEN_FLOW if other_value >= 0 else RED_FLOW
+    if has_other:
         bar_color = GREEN_BAR if other_value >= 0 else RED_BAR
         text_color = GREEN if other_value >= 0 else RED
-        _ribbon(
-            ax,
-            x_operating + operating_width,
-            operating_bottom - min(other_height, operating_height * 0.14),
-            operating_bottom,
-            x_final,
-            other_top,
-            other_top + other_height,
-            flow_color,
-        )
         _bar(ax, x_final, other_top, final_width, other_height, bar_color)
-        ax.text(1640, 450, "Other", ha="center", color=text_color, **_font(17, "bold"))
         ax.text(
             1640,
-            482,
+            other_top + 20,
+            "Other",
+            ha="center",
+            color=text_color,
+            **_font(17, "bold"),
+        )
+        ax.text(
+            1640,
+            other_top + 52,
             _money(other_value, unit, expense=other_value < 0),
             ha="center",
             color=text_color,
             **_font(15),
         )
 
-    if tax_value > 0:
-        tax_height = height(tax_value, 11)
-        tax_top = 495.0
-        _ribbon(
-            ax,
-            x_operating + operating_width,
-            operating_bottom - min(tax_height, operating_height * 0.18),
-            operating_bottom,
-            x_final,
-            tax_top,
-            tax_top + tax_height,
-            RED_FLOW,
-        )
+    if has_tax:
         _bar(ax, x_final, tax_top, final_width, tax_height, RED_BAR)
-        ax.text(1816, 512, "Tax", ha="center", color=RED, **_font(17, "bold"))
-        ax.text(1816, 546, _money(tax_value, unit, True), ha="center", color=RED, **_font(15))
+        ax.text(1816, tax_top + 17, "Tax", ha="center", color=RED, **_font(17, "bold"))
+        ax.text(
+            1816,
+            tax_top + 51,
+            _money(tax_value, unit, True),
+            ha="center",
+            color=RED,
+            **_font(15),
+        )
 
     expense_items = [
         (
@@ -802,11 +860,21 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
             795.0,
         ),
     ]
+    # Keep the opex detail bars below the tax slot so their ribbons also descend,
+    # clearing the tax label block (not just its bar), and leave room for each
+    # label block (name + amount + two ratio lines).
+    expense_floor = (
+        max(tax_top + tax_height + 8.0, tax_top + 81.0)
+        if has_tax
+        else max(net_bottom, operating_bottom) + 8.0
+    )
     expense_cursor = opex_top
     for name, value, pct, pp, top in expense_items:
         if value <= 0:
             continue
         item_height = height(value, 12)
+        top = max(top, expense_floor)
+        expense_floor = top + max(item_height + 8.0, 125.0)
         _ribbon(
             ax,
             x_operating + operating_width,
