@@ -77,9 +77,16 @@ contents. The agent must open and inspect each official source before using it.
 
 ## Assets And Trademarks
 
-The repository does not redistribute the third-party layout reference or
-company logos. Add a logo only when it is user-supplied or obtained from an
-official source with appropriate permission; otherwise the renderer uses text.
+The repository includes the complete visual material bundle used to reproduce
+the example:
 
-Company names and trademarks belong to their respective owners and are not
-licensed under the repository's MIT License.
+- `assets/reference-layout.jpg`: the original layout reference
+- `assets/reference-output.png`: the renderer's verified output
+- `assets/apple-touch-icon.png`: an optional Apple brand asset
+
+The original layout reference, company logo, company names, and trademarks are
+third-party material and are not licensed under this repository's MIT License.
+See `THIRD_PARTY_NOTICES.md` before redistributing or publishing derived work.
+For other companies, add a logo only when it is user-supplied or obtained from
+an official source with appropriate permission; otherwise the renderer uses
+text.

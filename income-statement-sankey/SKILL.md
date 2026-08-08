@@ -6,7 +6,9 @@ description: 拉取并核验上市公司季度或年度财报，分析收入组�
 # Income Statement Sankey
 
 Produce a source-recorded, reconciled income-statement Sankey PNG whose geometry
-follows the bundled `assets/reference-output.png`.
+follows the bundled original reference in `assets/reference-layout.jpg`.
+Use `assets/reference-output.png` as the deterministic renderer regression
+baseline.
 
 ## Required workflow
 
@@ -36,7 +38,8 @@ uv run <SKILL_DIR>/scripts/build_chart.py \
   -o OUTPUT.png
 ```
 
-8. Inspect the PNG before delivery. Compare it with
+8. Inspect the PNG before delivery. Compare the composition with
+   `assets/reference-layout.jpg` and the renderer result with
    `assets/reference-output.png`; fix clipping, overlap, wrong ordering, or
    unreadable labels.
 9. Return the PNG plus a concise analysis of revenue mix, growth, margins, and
