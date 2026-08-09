@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "income-statement-sankey"
 SAMPLE = SKILL / "scripts/examples/aapl_q3_fy26_full.json"
 CONGLOMERATE_SAMPLE = SKILL / "scripts/examples/brk_q2_2026_conglomerate.json"
+NET_LOSS_SAMPLE = SKILL / "scripts/examples/intc_q2_2026_net_loss.json"
 SPEC = importlib.util.spec_from_file_location(
     "validate_data", SKILL / "scripts/validate_data.py"
 )
@@ -52,6 +53,20 @@ class ValidateDataTests(unittest.TestCase):
         broken["total_revenue"]["yoy_pct"] = 999
         self.assertTrue(
             any("total_revenue YoY" in error for error in MODULE.validate(broken))
+        )
+
+    def test_net_loss_sample_is_valid(self) -> None:
+        net_loss_data = json.loads(NET_LOSS_SAMPLE.read_text())
+        self.assertEqual(MODULE.validate(net_loss_data), [])
+
+    def test_rejects_fabricated_net_loss_margin(self) -> None:
+        net_loss_data = json.loads(NET_LOSS_SAMPLE.read_text())
+        net_loss_data["net_profit"]["margin_pct"] = 67.26
+        self.assertTrue(
+            any(
+                "net_profit.margin_pct" in error
+                for error in MODULE.validate(net_loss_data)
+            )
         )
 
 

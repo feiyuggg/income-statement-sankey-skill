@@ -108,12 +108,13 @@ Intermediate JSON consumed by `render_sankey.py`.
 
 | Field | Meaning |
 |-------|---------|
-| amounts | In `unit` (default billions). Positive numbers. |
+| amounts | In `unit` (default billions). Cost lines are positive magnitudes; `net_profit.amount` retains its reported sign. |
 | `yoy_pct` | Year-over-year % change of the dollar amount |
 | `margin_pct` | Amount / total_revenue × 100 |
 | `*_yoy_pp` | Year-over-year change in margin/ratio, in percentage **points** |
 | `tax` | Tax provision (drawn as outflow / expense) |
 | `other_income` | Non-operating other (can be negative) |
+| `net_profit.amount` | Net income is positive; net loss is negative and renders as a red loss node. |
 | `source_records` | Auditable sources with publisher, retrieval date, and HTTPS URL. At least one official or regulatory record is required. The agent must still open and inspect the document; metadata validation cannot prove its contents. |
 | `revenue_groups` | At least two company-reported revenue components. Shares are calculated by the renderer. |
 | `segments` | Optional. If empty, left side shows only Products + Services bars |

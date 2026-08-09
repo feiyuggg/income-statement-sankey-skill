@@ -438,7 +438,7 @@ def validate(data: dict[str, Any], tolerance: float | None = None) -> list[str]:
         opex,
     )
 
-    net_profit = _require_number(errors, data, "net_profit", "amount", positive=True)
+    net_profit = _require_number(errors, data, "net_profit", "amount")
     tax = _num(data.get("tax"))
     other = _num(data.get("other_income"))
     if tax is None:

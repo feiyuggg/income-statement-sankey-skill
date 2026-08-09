@@ -1,0 +1,69 @@
+{
+  "company": "Intel Corporation",
+  "ticker": "INTC",
+  "period_label": "Q2 FY2026",
+  "period_end_label": "Quarter ended June 27, 2026",
+  "period_end": "2026-06-27",
+  "currency": "USD",
+  "unit": "B",
+  "brand": { "logo_text": "intel" },
+  "source_records": [
+    {
+      "label": "Intel Q2 2026 earnings release",
+      "type": "official_ir",
+      "publisher": "Intel Corporation",
+      "retrieved_on": "2026-08-09",
+      "url": "https://www.intc.com/news-events/press-releases/detail/1776/intel-reports-second-quarter-2026-financial-results"
+    },
+    {
+      "label": "Intel Q2 2026 Form 10-Q",
+      "type": "regulatory_filing",
+      "publisher": "Intel Corporation",
+      "retrieved_on": "2026-08-09",
+      "url": "https://www.intc.com/filings-reports/all-sec-filings/content/0000050863-26-000157/intc-20260627.htm"
+    }
+  ],
+  "segments": [],
+  "revenue_groups": [
+    { "id": "ccpg", "name": "CCPG", "revenue": 8.877, "yoy_pct": 12.78 },
+    { "id": "dcai", "name": "DCAI", "revenue": 6.262, "yoy_pct": 58.97 },
+    { "id": "foundry_external", "name": "Foundry external", "revenue": 0.293, "yoy_pct": 1231.82 },
+    { "id": "other_external", "name": "Other external", "revenue": 0.696, "yoy_pct": -32.23 }
+  ],
+  "total_revenue": { "revenue": 16.128, "yoy_pct": 25.42 },
+  "gross_profit": { "amount": 6.509, "margin_pct": 40.36, "margin_yoy_pp": 12.81 },
+  "cogs": { "amount": 9.619 },
+  "operating_profit": { "amount": 1.796, "margin_pct": 11.14, "margin_yoy_pp": 35.83 },
+  "opex": {
+    "amount": 4.713,
+    "rd": 3.368,
+    "rd_pct_rev": 20.88,
+    "rd_yoy_pp": -7.77,
+    "sga": 1.345,
+    "sga_pct_rev": 8.34,
+    "sga_yoy_pp": -15.25,
+    "items": [
+      { "name": "R&D", "amount": 3.368, "pct_rev": 20.88, "yoy_pp": -7.77 },
+      { "name": "MG&A + restructuring", "amount": 1.345, "pct_rev": 8.34, "yoy_pp": -15.25 }
+    ]
+  },
+  "net_profit": { "amount": -10.848, "margin_pct": -67.26, "margin_yoy_pp": -43.75 },
+  "tax": 0.029,
+  "other_income": -12.615,
+  "prior_period": {
+    "total_revenue": 12.859,
+    "revenue_groups": [
+      { "id": "ccpg", "revenue": 7.871 },
+      { "id": "dcai", "revenue": 3.939 },
+      { "id": "foundry_external", "revenue": 0.022 },
+      { "id": "other_external", "revenue": 1.027 }
+    ],
+    "segments": [],
+    "gross_profit": 3.542,
+    "operating_profit": -3.176,
+    "net_profit": -3.024,
+    "opex": { "rd": 3.684, "sga": 3.034 }
+  },
+  "footer_note": "Revenue groups use external-customer revenue. Other external is the reconciled residual. MG&A and restructuring are combined in operating-expense detail.",
+  "estimates": []
+}

@@ -4,6 +4,9 @@ A Codex skill that retrieves official earnings data, analyzes revenue mix and
 profit structure, validates the numbers, and renders a deterministic
 `2000x1122` income-statement Sankey PNG.
 
+The default renderer supports both net income and net loss, including small
+tax values, multi-group revenue labels, and long operating-expense names.
+
 The chart includes:
 
 - Company-reported revenue groups and their revenue shares

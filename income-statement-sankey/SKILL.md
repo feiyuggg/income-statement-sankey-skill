@@ -64,6 +64,8 @@ uv run <SKILL_DIR>/scripts/build_chart.py \
 - Require at least two company-reported revenue groups. Product/category
   segments may be omitted only when the official filing does not disclose them.
 - Treat negative other income as an expense and color it red.
+- Preserve the sign of net income. Render a negative amount as a red `Net loss`
+  node, with operating profit visibly offsetting the non-operating expense flow.
 - Put estimates in `estimates` and label them in the footer. Do not silently
   mix estimates with reported figures.
 - Use the filing's presentation currency. Convert only when the user asks.
