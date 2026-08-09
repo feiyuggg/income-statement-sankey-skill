@@ -131,6 +131,19 @@ quarter-specific extraction, and every JSON must validate before deployment.
   cost ribbons on a light-gray background.
 - Use direct labels, not floating cards.
 - Keep labels outside ribbons and maintain proportional bar/ribbon thickness.
+- Treat bars, complete text bounding boxes, ribbons, the footer, and the canvas
+  edge as shared layout obstacles. Enforce explicit vertical clearance for
+  bar-to-bar, label-to-label, label-to-bar, and label-to-ribbon pairs instead
+  of resolving each element with isolated fixed offsets.
+- Generate multiple label anchors when space is constrained. Labels may sit
+  above, below, left, right, or inside a sufficiently large bar; choose the
+  nearest in-bounds candidate whose complete text bounding box clears other
+  labels, bars, and important ribbons. A label is not required to stay above
+  its bar.
+- Preserve the same vertical ordering at both ends of sibling ribbons. Assign
+  source intervals by destination Y order so Net, Tax, negative Other, and
+  future right-column flows remain monotonic and do not cross because of an
+  index-order mismatch.
 - Compute the right-side profit layout from rendered heights instead of fixed
   Y coordinates. Net profit/loss, Tax, and expense-detail sinks must be stacked
   with explicit vertical gaps, including enough clearance for the four-line net

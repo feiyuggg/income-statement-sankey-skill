@@ -151,6 +151,23 @@ def _bounded_stacked_spans(
     return spans
 
 
+def _destination_ordered_flow_spans(
+    *,
+    parent_top: float,
+    parent_bottom: float,
+    flows: list[tuple[str, float, float]],
+) -> dict[str, tuple[float, float]]:
+    ordered_flows = sorted(flows, key=lambda flow: flow[2])
+    ordered_spans = _bounded_stacked_spans(
+        parent_top,
+        parent_bottom,
+        [flow[1] for flow in ordered_flows],
+    )
+    return {
+        flow[0]: span for flow, span in zip(ordered_flows, ordered_spans)
+    }
+
+
 EXPENSE_LABEL_HEIGHT = 98.0
 OTHER_LABEL_HEIGHT = 58.0
 LABEL_CLEARANCE = 8.0
@@ -1886,16 +1903,26 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         other_expense_height = (
             height(abs(other_value)) if other_value < -0.05 else 0.0
         )
-        source_spans = _bounded_stacked_spans(
-            operating_top,
-            operating_bottom,
-            [height(net_value), other_expense_height, tax_accounting_height],
+        other_top = (
+            float(right_layout["other_outflow_top"])
+            if other_expense_height > 0
+            else 0.0
+        )
+        source_flows = [("net", height(net_value), net_top)]
+        if tax_height > 0:
+            source_flows.append(("tax", tax_accounting_height, tax_top))
+        if other_expense_height > 0:
+            source_flows.append(("other", other_expense_height, other_top))
+        source_spans = _destination_ordered_flow_spans(
+            parent_top=operating_top,
+            parent_bottom=operating_bottom,
+            flows=source_flows,
         )
         _ribbon(
             ax,
             x_source,
-            source_spans[0][0],
-            source_spans[0][1],
+            source_spans["net"][0],
+            source_spans["net"][1],
             x_final,
             net_top,
             net_bottom,
@@ -1903,12 +1930,11 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         )
         if other_value < -0.05:
             other_height = other_outflow_height
-            other_top = float(right_layout["other_outflow_top"])
             _ribbon(
                 ax,
                 x_source,
-                source_spans[1][0],
-                source_spans[1][1],
+                source_spans["other"][0],
+                source_spans["other"][1],
                 x_final,
                 other_top,
                 other_top + other_height,
@@ -1937,8 +1963,8 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
             _ribbon(
                 ax,
                 x_source,
-                source_spans[2][0],
-                source_spans[2][1],
+                source_spans["tax"][0],
+                source_spans["tax"][1],
                 x_final,
                 tax_top,
                 tax_top + tax_height,

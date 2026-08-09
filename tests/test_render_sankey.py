@@ -28,6 +28,23 @@ class BoundedStackedSpansTests(unittest.TestCase):
         self.assertAlmostEqual(spans[1][1], 30.0)
 
 
+class DestinationOrderedFlowSpansTests(unittest.TestCase):
+    def test_assigns_source_spans_in_destination_order(self) -> None:
+        spans = MODULE._destination_ordered_flow_spans(
+            parent_top=100.0,
+            parent_bottom=200.0,
+            flows=[
+                ("net", 50.0, 310.0),
+                ("other", 10.0, 590.0),
+                ("tax", 20.0, 520.0),
+            ],
+        )
+
+        self.assertEqual(spans["net"], (100.0, 150.0))
+        self.assertEqual(spans["tax"], (150.0, 170.0))
+        self.assertEqual(spans["other"], (170.0, 180.0))
+
+
 class RightProfitLayoutTests(unittest.TestCase):
     def test_stacks_large_net_profit_and_tax_without_overlap(self) -> None:
         layout = MODULE._right_profit_layout(
