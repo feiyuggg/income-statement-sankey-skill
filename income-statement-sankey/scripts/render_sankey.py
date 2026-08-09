@@ -6,7 +6,7 @@
 #     "pillow>=10",
 # ]
 # ///
-"""Render a 2000x1122 reference-style income-statement Sankey PNG."""
+"""Render a 2000x1122 reference-layout income-statement Sankey PNG."""
 
 from __future__ import annotations
 
@@ -240,10 +240,569 @@ def _source_label(data: dict[str, Any]) -> str:
             labels.append(label)
     if not labels:
         labels = [str(item) for item in data.get("source_notes") or [] if str(item)]
-    return " | ".join(labels[:2]) or "Official company filing"
+    text = " | ".join(labels[:2]) or "Official company filing"
+    note = str(data.get("footer_note") or "").strip()
+    return f"{text} | {note}" if note else text
+
+
+def _figure(dpi: int):
+    """Create the standard 2000x1122 canvas with an inverted-y pixel axis."""
+    plt.rcParams["font.sans-serif"] = [
+        "Helvetica Neue",
+        "Helvetica",
+        "Arial",
+        "DejaVu Sans",
+    ]
+    plt.rcParams["axes.unicode_minus"] = False
+    fig = plt.figure(figsize=(WIDTH / dpi, HEIGHT / dpi), dpi=dpi, facecolor=BG)
+    ax = fig.add_axes((0, 0, 1, 1))
+    ax.set_xlim(0, WIDTH)
+    ax.set_ylim(HEIGHT, 0)
+    ax.axis("off")
+    ax.set_facecolor(BG)
+    return fig, ax
+
+
+def _title_block(fig, ax, data: dict[str, Any]) -> None:
+    company = str(data.get("company") or data.get("ticker") or "Company")
+    period = str(data.get("period_label") or "")
+    period_end = str(data.get("period_end_label") or "")
+    title_text = ax.text(
+        1000,
+        105,
+        f"{company} {period} Income Statement",
+        ha="center",
+        va="center",
+        color=TITLE,
+        **_font(65, "bold"),
+    )
+    fig.canvas.draw()
+    extent = title_text.get_window_extent(fig.canvas.get_renderer())
+    if extent.width > 1860.0:
+        title_text.set_fontsize(title_text.get_fontsize() * 1860.0 / extent.width)
+    ax.text(1902, 190, period, ha="right", va="center", color="#444444", **_font(26, "bold"))
+    ax.text(1902, 228, period_end, ha="right", va="center", color=MUTED, **_font(17))
+
+
+def _footer_block(ax, data: dict[str, Any]) -> None:
+    ax.text(1000, 1066, _source_label(data), ha="center", color=SOURCE, **_font(13, "bold"))
+    ax.text(
+        1000,
+        1094,
+        "For information only, not investment advice",
+        ha="center",
+        color=MUTED,
+        **_font(10),
+    )
+
+
+def _render_conglomerate(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
+    """Segment-basis layout for conglomerates and financials.
+
+    Revenue splits straight into operating profit and operating costs (no
+    gross-profit line, which is meaningless for insurers and holding
+    companies), then operating profit plus non-operating inflows feed a
+    pre-tax node that splits into net profit and tax.
+    """
+    global _FONT_DPI
+    _FONT_DPI = dpi
+
+    unit = str(data.get("unit") or "B")
+    ticker = str(data.get("ticker") or "")
+    company = str(data.get("company") or ticker or "Company")
+
+    revenue = float(data["total_revenue"]["revenue"])
+    revenue_yoy = (data.get("total_revenue") or {}).get("yoy_pct")
+
+    operating = data.get("operating_profit") or {}
+    operating_value = float(operating.get("amount") or 0)
+    costs = data.get("operating_costs") or {}
+    costs_value = float(costs.get("amount") or max(revenue - operating_value, 0))
+    pretax = data.get("pretax_profit") or {}
+    invest = data.get("investment_gains") or {}
+    invest_value = float(invest.get("amount") or 0)
+    other_value = float(data.get("other_income") or 0)
+    pretax_value = float(
+        pretax.get("amount") or operating_value + invest_value + other_value
+    )
+    net = data.get("net_profit") or {}
+    net_value = float(net.get("amount") or 0)
+    tax_value = float(data.get("tax") or 0)
+
+    revenue_other = data.get("revenue_other") or {}
+    revenue_other_value = float(revenue_other.get("amount") or 0)
+
+    fig, ax = _figure(dpi)
+    _title_block(fig, ax, data)
+
+    scale = 330.0 / revenue
+
+    def height(value: float | None, minimum: float = 0.0) -> float:
+        if value is None:
+            return minimum
+        return max(abs(float(value)) * scale, minimum)
+
+    x_segment, segment_width = 300.0, 54.0
+    x_revenue, revenue_width = 700.0, 56.0
+    x_split, split_width = 1030.0, 56.0
+    x_pretax, pretax_width = 1350.0, 56.0
+    x_final, final_width = 1670.0, 56.0
+
+    revenue_height = height(revenue)
+    revenue_top = 372.0
+    revenue_bottom = revenue_top + revenue_height
+    _bar(ax, x_revenue, revenue_top, revenue_width, revenue_height, DARK)
+
+    brand = data.get("brand") or {}
+    if not _draw_image(
+        ax,
+        brand.get("logo_path"),
+        x_revenue + revenue_width / 2,
+        205,
+        260,
+        120,
+        brand.get("logo_color"),
+    ):
+        ax.text(
+            x_revenue + revenue_width / 2,
+            205,
+            str(brand.get("logo_text") or ticker or company[:3].upper()),
+            ha="center",
+            va="center",
+            color=DARK,
+            **_font(38, "bold"),
+        )
+    ax.text(
+        x_revenue + revenue_width / 2,
+        revenue_top - 84,
+        "Revenue",
+        ha="center",
+        va="center",
+        color=DARK,
+        **_font(25, "bold"),
+    )
+    ax.text(
+        x_revenue + revenue_width / 2,
+        revenue_top - 46,
+        _money(revenue, unit),
+        ha="center",
+        va="center",
+        color=DARK,
+        **_font(24),
+    )
+    ax.text(
+        x_revenue + revenue_width / 2,
+        revenue_top - 12,
+        _yoy(revenue_yoy),
+        ha="center",
+        va="bottom",
+        color=MUTED,
+        **_font(16),
+    )
+
+    # ---- left column: business segments, each with its own margin ----
+    segments = [
+        segment
+        for segment in data.get("segments") or []
+        if segment.get("revenue") is not None
+    ][:9]
+    wrapped = [
+        textwrap.fill(str(segment.get("name") or ""), width=20) for segment in segments
+    ]
+    bar_heights = [height(float(segment["revenue"]), 12) for segment in segments]
+
+    def _label_block(index: int) -> float:
+        lines = wrapped[index].count("\n") + 1
+        has_margin = segments[index].get("margin_pct") is not None
+        return 25.0 * lines + (49.0 if has_margin else 28.0)
+
+    label_blocks = [_label_block(index) for index in range(len(segments))]
+    label_pitches = [block + 30.0 for block in label_blocks]
+    band_top, band_bottom = 236.0, 1040.0
+    gap = 5.0
+    reserve = 62.0 if revenue_other_value > 0 else 0.0
+    slots = [max(bar, pitch) for bar, pitch in zip(bar_heights, label_pitches)]
+    gaps = gap * max(len(slots) - 1, 0)
+    available = band_bottom - band_top - reserve
+    if sum(slots) + gaps > available:
+        factor = max(0.5, (available - gaps) / max(sum(slots), 1.0))
+        slots = [
+            max(bar, pitch * factor) for bar, pitch in zip(bar_heights, label_pitches)
+        ]
+    cursor = band_top + max(0.0, (available - (sum(slots) + gaps)) / 2)
+    target_cursor = revenue_top
+    for index, segment in enumerate(segments):
+        value = float(segment["revenue"])
+        slot = slots[index]
+        bar_height = bar_heights[index]
+        center = cursor + slot / 2
+        cursor += slot + gap
+        bar_top = center - bar_height / 2
+        target_height = revenue_height * value / revenue
+        _bar(ax, x_segment, bar_top, segment_width, bar_height, DARK)
+        _ribbon(
+            ax,
+            x_segment + segment_width,
+            bar_top,
+            bar_top + bar_height,
+            x_revenue,
+            target_cursor,
+            target_cursor + target_height,
+            GRAY,
+            0.93,
+        )
+        target_cursor += target_height
+
+        margin_pct = segment.get("margin_pct")
+        block = label_blocks[index]
+        name_lines = wrapped[index].count("\n") + 1
+        _draw_image(ax, segment.get("icon_path"), 120, center, 74, 62)
+        icon_drawn = bool(segment.get("icon_path"))
+        name_text = ax.text(
+            x_segment - 42,
+            center - block / 2,
+            wrapped[index],
+            ha="right",
+            va="top",
+            color=DARK,
+            linespacing=0.95,
+            **_font(19, "bold"),
+        )
+        left_limit = 172.0 if icon_drawn else 26.0
+        name_extent = name_text.get_window_extent(fig.canvas.get_renderer())
+        if name_extent.x0 < left_limit and name_extent.width > 0:
+            name_text.set_fontsize(
+                name_text.get_fontsize()
+                * (x_segment - 42 - left_limit)
+                / name_extent.width
+            )
+        detail = _money(value, unit)
+        yoy_text = _yoy(segment.get("yoy_pct"))
+        if yoy_text:
+            detail = f"{detail}   {yoy_text}"
+        ax.text(
+            x_segment - 42,
+            center - block / 2 + 25.0 * name_lines + 16,
+            detail,
+            ha="right",
+            va="center",
+            color=MUTED,
+            **_font(15),
+        )
+        if margin_pct is not None:
+            ax.text(
+                x_segment - 42,
+                center + block / 2 - 9,
+                _percent(margin_pct, " margin"),
+                ha="right",
+                va="center",
+                color=GREEN if float(margin_pct) >= 0 else RED,
+                **_font(14, "bold"),
+            )
+
+    if revenue_other_value > 0:
+        other_rev_height = height(revenue_other_value, 10)
+        other_rev_top = min(cursor + 26.0, band_bottom - other_rev_height)
+        _bar(ax, x_segment, other_rev_top, segment_width, other_rev_height, GREEN_BAR)
+        _ribbon(
+            ax,
+            x_segment + segment_width,
+            other_rev_top,
+            other_rev_top + height(revenue_other_value),
+            x_revenue,
+            target_cursor,
+            revenue_bottom,
+            GREEN_FLOW,
+        )
+        label = str(revenue_other.get("name") or "Other")
+        ax.text(
+            x_segment - 42,
+            other_rev_top + other_rev_height / 2 - 12,
+            label,
+            ha="right",
+            va="center",
+            color=GREEN,
+            **_font(18, "bold"),
+        )
+        ax.text(
+            x_segment - 42,
+            other_rev_top + other_rev_height / 2 + 14,
+            _money(revenue_other_value, unit),
+            ha="right",
+            va="center",
+            color=GREEN,
+            **_font(15),
+        )
+
+    # ---- revenue -> operating profit + operating costs ----
+    operating_height = height(operating_value)
+    costs_height = height(costs_value)
+    invest_height = height(invest_value, 10)
+    other_height = height(other_value, 10)
+    operating_top = 330.0
+    invest_top = operating_top + operating_height + 62.0
+    other_top = invest_top + invest_height + 84.0
+    costs_top = other_top + other_height + 40.0
+    if costs_top + costs_height > 995.0:
+        costs_top = max(other_top + other_height + 16.0, 995.0 - costs_height)
+    _ribbon(
+        ax,
+        x_revenue + revenue_width,
+        revenue_top,
+        revenue_top + operating_height,
+        x_split,
+        operating_top,
+        operating_top + operating_height,
+        GREEN_FLOW,
+    )
+    _ribbon(
+        ax,
+        x_revenue + revenue_width,
+        revenue_top + operating_height,
+        revenue_bottom,
+        x_split,
+        costs_top,
+        costs_top + costs_height,
+        RED_FLOW,
+    )
+    _bar(ax, x_split, operating_top, split_width, operating_height, GREEN_BAR)
+    _bar(ax, x_split, costs_top, split_width, costs_height, RED_BAR)
+
+    ax.text(
+        x_split + split_width / 2,
+        operating_top - 96,
+        "Operating profit",
+        ha="center",
+        color=GREEN,
+        **_font(23, "bold"),
+    )
+    ax.text(
+        x_split + split_width / 2,
+        operating_top - 58,
+        _money(operating_value, unit),
+        ha="center",
+        color=GREEN,
+        **_font(21),
+    )
+    ax.text(
+        x_split + split_width / 2,
+        operating_top - 24,
+        _percent(operating.get("margin_pct"), " margin"),
+        ha="center",
+        color=MUTED,
+        **_font(15),
+    )
+    if operating.get("margin_yoy_pp") is not None:
+        ax.text(
+            x_split + split_width / 2,
+            operating_top - 2,
+            _pp(operating.get("margin_yoy_pp")),
+            ha="center",
+            va="bottom",
+            color=MUTED,
+            **_font(14),
+        )
+    costs_label_y = costs_top + costs_height + 34
+    ax.text(
+        x_split + split_width / 2,
+        costs_label_y,
+        "Operating costs",
+        ha="center",
+        color=RED,
+        **_font(19, "bold"),
+    )
+    ax.text(
+        x_split + split_width / 2,
+        costs_label_y + 32,
+        "and expenses",
+        ha="center",
+        color=RED,
+        **_font(19, "bold"),
+    )
+    ax.text(
+        x_split + split_width / 2,
+        costs_label_y + 66,
+        _money(costs_value, unit, True),
+        ha="center",
+        color=RED,
+        **_font(18),
+    )
+
+    # ---- operating profit + investment gains + other -> pre-tax ----
+    pretax_height = height(pretax_value)
+    pretax_top = 300.0
+
+    _bar(ax, x_split, invest_top, split_width, invest_height, GREEN_BAR)
+    if abs(other_value) > 0.05:
+        _bar(ax, x_split, other_top, split_width, other_height, GREEN_BAR)
+
+    inflow_cursor = pretax_top
+    for source_top, source_value, flow_color in (
+        (operating_top, operating_value, GREEN_FLOW),
+        (invest_top, invest_value, GREEN_FLOW),
+        (other_top, other_value, GREEN_FLOW),
+    ):
+        thickness = height(source_value)
+        if thickness <= 0.5:
+            continue
+        _ribbon(
+            ax,
+            x_split + split_width,
+            source_top,
+            source_top + thickness,
+            x_pretax,
+            inflow_cursor,
+            inflow_cursor + thickness,
+            flow_color,
+        )
+        inflow_cursor += thickness
+    _bar(ax, x_pretax, pretax_top, pretax_width, pretax_height, GREEN_BAR)
+
+    ax.text(
+        x_split + split_width / 2,
+        invest_top + invest_height + 28,
+        "Investment gains",
+        ha="center",
+        color=GREEN,
+        **_font(18, "bold"),
+    )
+    ax.text(
+        x_split + split_width / 2,
+        invest_top + invest_height + 58,
+        _money(invest_value, unit),
+        ha="center",
+        color=GREEN,
+        **_font(16),
+    )
+    if abs(other_value) > 0.05:
+        ax.text(
+            x_split + split_width / 2 + 132,
+            other_top + other_height / 2 - 14,
+            "Other",
+            ha="center",
+            color=GREEN,
+            **_font(17, "bold"),
+        )
+        ax.text(
+            x_split + split_width / 2 + 132,
+            other_top + other_height / 2 + 14,
+            _money(other_value, unit),
+            ha="center",
+            color=GREEN,
+            **_font(15),
+        )
+
+    pretax_label = str(pretax.get("label") or "Profit before tax")
+    ax.text(
+        x_pretax + pretax_width / 2,
+        pretax_top - 72,
+        pretax_label,
+        ha="center",
+        color=GREEN,
+        **_font(21, "bold"),
+    )
+    ax.text(
+        x_pretax + pretax_width / 2,
+        pretax_top - 36,
+        _money(pretax_value, unit),
+        ha="center",
+        color=GREEN,
+        **_font(20),
+    )
+
+    # ---- pre-tax -> net profit + tax ----
+    net_height = height(net_value)
+    tax_height = height(tax_value, 10) if tax_value > 0 else 0.0
+    net_top = 262.0
+    tax_top = net_top + net_height + 92.0
+    outflow_cursor = pretax_top
+    _ribbon(
+        ax,
+        x_pretax + pretax_width,
+        outflow_cursor,
+        outflow_cursor + net_height,
+        x_final,
+        net_top,
+        net_top + net_height,
+        GREEN_FLOW,
+    )
+    outflow_cursor += net_height
+    _bar(ax, x_final, net_top, final_width, net_height, GREEN_BAR)
+    if tax_height > 0:
+        _ribbon(
+            ax,
+            x_pretax + pretax_width,
+            outflow_cursor,
+            outflow_cursor + height(tax_value),
+            x_final,
+            tax_top,
+            tax_top + tax_height,
+            RED_FLOW,
+        )
+        _bar(ax, x_final, tax_top, final_width, tax_height, RED_BAR)
+
+    ax.text(
+        x_final + final_width + 22,
+        net_top + 18,
+        "Net profit",
+        ha="left",
+        color=GREEN,
+        **_font(22, "bold"),
+    )
+    ax.text(
+        x_final + final_width + 22,
+        net_top + 56,
+        _money(net_value, unit),
+        ha="left",
+        color=GREEN,
+        **_font(20),
+    )
+    ax.text(
+        x_final + final_width + 22,
+        net_top + 90,
+        _percent(net.get("margin_pct"), " margin"),
+        ha="left",
+        color=MUTED,
+        **_font(15),
+    )
+    if net.get("margin_yoy_pp") is not None:
+        ax.text(
+            x_final + final_width + 22,
+            net_top + 120,
+            _pp(net.get("margin_yoy_pp")),
+            ha="left",
+            color=MUTED,
+            **_font(14),
+        )
+    if tax_height > 0:
+        ax.text(
+            x_final + final_width + 22,
+            tax_top + 12,
+            "Tax",
+            ha="left",
+            color=RED,
+            **_font(19, "bold"),
+        )
+        ax.text(
+            x_final + final_width + 22,
+            tax_top + 46,
+            _money(tax_value, unit, True),
+            ha="left",
+            color=RED,
+            **_font(16),
+        )
+
+    _footer_block(ax, data)
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=dpi, facecolor=BG)
+    plt.close(fig)
+    return out_path
 
 
 def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
+    if str((data.get("layout") or {}).get("style") or "").lower() == "conglomerate":
+        return _render_conglomerate(data, out_path, dpi=dpi)
     global _FONT_DPI
     _FONT_DPI = dpi
 
@@ -293,7 +852,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
     ax.axis("off")
     ax.set_facecolor(BG)
 
-    ax.text(
+    title_text = ax.text(
         1000,
         105,
         f"{company} {period} Income Statement",
@@ -302,6 +861,12 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         color=TITLE,
         **_font(65, "bold"),
     )
+    fig.canvas.draw()
+    title_extent = title_text.get_window_extent(fig.canvas.get_renderer())
+    if title_extent.width > 1860.0:
+        title_text.set_fontsize(
+            title_text.get_fontsize() * 1860.0 / title_extent.width
+        )
     ax.text(1902, 190, period, ha="right", va="center", color="#444444", **_font(26, "bold"))
     ax.text(1902, 228, period_end, ha="right", va="center", color=MUTED, **_font(17))
 
@@ -406,9 +971,9 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
             0.93,
         )
         if len(groups) == 2:
-            label_y = 300.0 if group_index == 0 else 760.0
+            label_y = min(330.0 if group_index == 0 else 790.0, group_top - 96.0)
         else:
-            label_y = group_top - 65 if center < 650 else group_top - 54
+            label_y = group_top - 92
         ax.text(
             x_group + group_width / 2,
             label_y,
@@ -429,16 +994,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         )
         ax.text(
             x_group + group_width / 2,
-            label_y + 76,
-            _percent(group["revenue"] / revenue * 100, " of revenue"),
-            ha="center",
-            va="center",
-            color=MUTED,
-            **_font(14),
-        )
-        ax.text(
-            x_group + group_width / 2,
-            label_y + 108,
+            label_y + 80,
             _yoy(group.get("yoy_pct")),
             ha="center",
             va="center",
@@ -450,12 +1006,50 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         segment
         for segment in data.get("segments") or []
         if segment.get("revenue") is not None
-    ][:6]
+    ][:8]
+    compact_segments = len(segments) > 6
+    compact_wrapped = (
+        [
+            textwrap.fill(str(segment.get("name") or ""), width=20)
+            for segment in segments
+        ]
+        if compact_segments
+        else []
+    )
     if segments:
         if len(segments) == 1:
             centers = [485.0]
         elif len(segments) == 4:
             centers = [390.0, 580.0, 710.0, 805.0]
+        elif compact_segments:
+            band_top, band_bottom = 285.0, 1010.0
+            slot_gap = 4.0
+            raw_heights = [
+                height(float(segment["revenue"]), 13) for segment in segments
+            ]
+            label_pitches = [
+                21.0 * (text.count("\n") + 1) + 44.0 for text in compact_wrapped
+            ]
+            available = band_bottom - band_top
+            slots = [
+                max(bar, pitch) for bar, pitch in zip(raw_heights, label_pitches)
+            ]
+            gaps = slot_gap * (len(slots) - 1)
+            if sum(slots) + gaps > available:
+                factor = max(
+                    0.55, (available - gaps) / max(sum(slots), 1.0)
+                )
+                slots = [
+                    max(bar, pitch * factor)
+                    for bar, pitch in zip(raw_heights, label_pitches)
+                ]
+            cursor = band_top + max(
+                0.0, (available - (sum(slots) + gaps)) / 2
+            )
+            centers = []
+            for slot in slots:
+                centers.append(cursor + slot / 2)
+                cursor += slot + slot_gap
         else:
             centers = [
                 340.0 + i * (500.0 / (len(segments) - 1))
@@ -505,16 +1099,55 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
                 70,
                 70,
             )
+            if compact_segments and not icon_drawn:
+                detail = _money(value, unit)
+                yoy_text = _yoy(segment.get("yoy_pct"))
+                if yoy_text:
+                    detail = f"{detail}   {yoy_text}"
+                wrapped = compact_wrapped[index]
+                block = 21.0 * (wrapped.count("\n") + 1) + 32.0
+                name_text = ax.text(
+                    255,
+                    center - block / 2,
+                    wrapped,
+                    ha="right",
+                    va="top",
+                    color=DARK,
+                    linespacing=0.95,
+                    **_font(16, "bold"),
+                )
+                name_extent = name_text.get_window_extent(fig.canvas.get_renderer())
+                if name_extent.x0 < 10.0 and name_extent.width > 0:
+                    name_text.set_fontsize(
+                        name_text.get_fontsize() * 245.0 / name_extent.width
+                    )
+                ax.text(
+                    255,
+                    center + block / 2 - 9,
+                    detail,
+                    ha="right",
+                    va="center",
+                    color=MUTED,
+                    **_font(14),
+                )
+                continue
             label_x = 255
             ha = "right"
             if not icon_drawn:
+                segment_name = str(segment.get("name") or "")
+                wrapped_name = (
+                    textwrap.fill(segment_name, width=18)
+                    if len(segment_name) > 20
+                    else segment_name
+                )
                 ax.text(
                     label_x,
                     center,
-                    str(segment.get("name") or ""),
+                    wrapped_name,
                     ha=ha,
                     va="center",
                     color=DARK,
+                    linespacing=0.95,
                     **_font(22 if len(segments) <= 4 else 19, "bold"),
                 )
                 subtitle = str(segment.get("subtitle") or "")
@@ -545,7 +1178,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
                 x_segment - 20,
                 amount_y,
                 _money(value, unit),
-                ha="left",
+                ha="right",
                 va="center",
                 color=DARK,
                 **_font(19),
@@ -554,7 +1187,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
                 x_segment - 20,
                 amount_y + 34,
                 _yoy(segment.get("yoy_pct")),
-                ha="left",
+                ha="right",
                 va="center",
                 color=MUTED,
                 **_font(14),
@@ -659,16 +1292,30 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
     ax.text(1440, 708, "expenses", ha="center", color=RED, **_font(19, "bold"))
     ax.text(1440, 748, _money(opex_value, unit, True), ha="center", color=RED, **_font(18))
 
-    product_cogs = cogs.get("products")
-    service_cogs = cogs.get("services")
     cogs_parts: list[tuple[str, float, Any]] = []
-    if product_cogs is not None:
-        cogs_parts.append(("Products", float(product_cogs), cogs.get("products_gm_pct")))
-    if service_cogs is not None:
-        cogs_parts.append(("Services", float(service_cogs), cogs.get("services_gm_pct")))
+    for part in cogs.get("parts") or []:
+        if part.get("amount") is None:
+            continue
+        cogs_parts.append(
+            (str(part.get("name") or ""), float(part["amount"]), part.get("gm_pct"))
+        )
+    if not cogs_parts:
+        product_cogs = cogs.get("products")
+        service_cogs = cogs.get("services")
+        if product_cogs is not None:
+            cogs_parts.append(
+                ("Products", float(product_cogs), cogs.get("products_gm_pct"))
+            )
+        if service_cogs is not None:
+            cogs_parts.append(
+                ("Services", float(service_cogs), cogs.get("services_gm_pct"))
+            )
     if cogs_parts:
         source_cursor = cogs_top
         part_tops = [790.0, 960.0]
+        min_second_top = 790.0 + height(cogs_parts[0][1], 12) + 30.0
+        if len(cogs_parts) > 1 and part_tops[1] < min_second_top:
+            part_tops[1] = min_second_top
         for index, (name, value, margin) in enumerate(cogs_parts[:2]):
             part_height = height(value, 12)
             part_top = part_tops[index]
@@ -685,7 +1332,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
             )
             source_cursor += part_height
             _bar(ax, x_cost_detail, part_top, detail_width, part_height, RED_BAR)
-            text_y = 808.0 if index == 0 else 918.0
+            text_y = part_top + 18.0 if index == 0 else part_top - 42.0
             ax.text(
                 x_cost_detail + 150,
                 text_y,
@@ -712,23 +1359,124 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
                     **_font(14),
                 )
 
-    ax.text(1175, 942, "Cost of", ha="center", color=RED, **_font(19, "bold"))
-    ax.text(1175, 974, "revenue", ha="center", color=RED, **_font(19, "bold"))
-    ax.text(1175, 1012, _money(cogs_value, unit, True), ha="center", color=RED, **_font(17))
+    ax.text(1158, 676, "Cost of", ha="center", color=RED, **_font(19, "bold"))
+    ax.text(1158, 708, "revenue", ha="center", color=RED, **_font(19, "bold"))
+    ax.text(1158, 748, _money(cogs_value, unit, True), ha="center", color=RED, **_font(17))
 
     net_height = height(net_value)
     net_top = 310.0
     net_bottom = net_top + net_height
-    _ribbon(
-        ax,
-        x_operating + operating_width,
-        operating_top,
-        operating_top + min(net_height, operating_height),
-        x_final,
-        net_top,
-        net_bottom,
-        GREEN_FLOW,
-    )
+    tax_height = height(tax_value, 11) if tax_value > 0 else 0.0
+    tax_top = 495.0
+    other_inflow = other_value > 0.05
+    x_source = x_operating + operating_width
+
+    if other_inflow:
+        # Positive non-operating income adds to profit, so route it as an
+        # inflow that merges into net profit (matching the reference layout)
+        # instead of an outflow leaving operating profit.
+        other_height = height(other_value, 10)
+        other_source_top = operating_bottom + 26.0
+        _bar(
+            ax,
+            x_operating,
+            other_source_top,
+            operating_width,
+            other_height,
+            GREEN_BAR,
+        )
+        supplies = [
+            [operating_top, operating_height],
+            [other_source_top, height(other_value)],
+        ]
+        for sink_top, sink_height, sink_color in (
+            (net_top, net_height, GREEN_FLOW),
+            (tax_top, tax_height, RED_FLOW),
+        ):
+            cursor = sink_top
+            remaining = sink_height
+            for supply in supplies:
+                if remaining <= 0.5:
+                    break
+                take = min(remaining, supply[1])
+                if take <= 0.5:
+                    continue
+                _ribbon(
+                    ax,
+                    x_source,
+                    supply[0],
+                    supply[0] + take,
+                    x_final,
+                    cursor,
+                    cursor + take,
+                    sink_color,
+                )
+                supply[0] += take
+                supply[1] -= take
+                cursor += take
+                remaining -= take
+        ax.text(
+            x_operating + operating_width / 2,
+            other_source_top + other_height + 26,
+            "Other",
+            ha="center",
+            color=GREEN,
+            **_font(17, "bold"),
+        )
+        ax.text(
+            x_operating + operating_width / 2,
+            other_source_top + other_height + 58,
+            _money(other_value, unit),
+            ha="center",
+            color=GREEN,
+            **_font(15),
+        )
+    else:
+        _ribbon(
+            ax,
+            x_source,
+            operating_top,
+            operating_top + min(net_height, operating_height),
+            x_final,
+            net_top,
+            net_bottom,
+            GREEN_FLOW,
+        )
+        if other_value < -0.05:
+            other_height = height(abs(other_value), 10)
+            other_top = 430.0
+            _ribbon(
+                ax,
+                x_source,
+                operating_bottom - min(other_height, operating_height * 0.14),
+                operating_bottom,
+                x_final,
+                other_top,
+                other_top + other_height,
+                RED_FLOW,
+            )
+            _bar(ax, x_final, other_top, final_width, other_height, RED_BAR)
+            ax.text(1640, 450, "Other", ha="center", color=RED, **_font(17, "bold"))
+            ax.text(
+                1640,
+                482,
+                _money(other_value, unit, expense=True),
+                ha="center",
+                color=RED,
+                **_font(15),
+            )
+        if tax_height > 0:
+            _ribbon(
+                ax,
+                x_source,
+                operating_bottom - min(tax_height, operating_height * 0.18),
+                operating_bottom,
+                x_final,
+                tax_top,
+                tax_top + tax_height,
+                RED_FLOW,
+            )
+
     _bar(ax, x_final, net_top, final_width, net_height, GREEN_BAR)
     ax.text(1764, 335, "Net profit", ha="left", color=GREEN, **_font(22, "bold"))
     ax.text(1764, 375, _money(net_value, unit), ha="left", color=GREEN, **_font(20))
@@ -742,82 +1490,66 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
     )
     ax.text(1764, 444, _pp(net.get("margin_yoy_pp")), ha="left", color=MUTED, **_font(14))
 
-    if abs(other_value) > 0.05:
-        other_height = height(other_value, 10)
-        other_top = 430.0
-        flow_color = GREEN_FLOW if other_value >= 0 else RED_FLOW
-        bar_color = GREEN_BAR if other_value >= 0 else RED_BAR
-        text_color = GREEN if other_value >= 0 else RED
-        _ribbon(
-            ax,
-            x_operating + operating_width,
-            operating_bottom - min(other_height, operating_height * 0.14),
-            operating_bottom,
-            x_final,
-            other_top,
-            other_top + other_height,
-            flow_color,
-        )
-        _bar(ax, x_final, other_top, final_width, other_height, bar_color)
-        ax.text(1640, 450, "Other", ha="center", color=text_color, **_font(17, "bold"))
-        ax.text(
-            1640,
-            482,
-            _money(other_value, unit, expense=other_value < 0),
-            ha="center",
-            color=text_color,
-            **_font(15),
-        )
-
-    if tax_value > 0:
-        tax_height = height(tax_value, 11)
-        tax_top = 495.0
-        _ribbon(
-            ax,
-            x_operating + operating_width,
-            operating_bottom - min(tax_height, operating_height * 0.18),
-            operating_bottom,
-            x_final,
-            tax_top,
-            tax_top + tax_height,
-            RED_FLOW,
-        )
+    if tax_height > 0:
         _bar(ax, x_final, tax_top, final_width, tax_height, RED_BAR)
         ax.text(1816, 512, "Tax", ha="center", color=RED, **_font(17, "bold"))
         ax.text(1816, 546, _money(tax_value, unit, True), ha="center", color=RED, **_font(15))
 
-    expense_items = [
-        (
-            "R&D",
-            rd_value,
-            opex.get("rd_pct_rev"),
-            opex.get("rd_yoy_pp"),
-            640.0,
-        ),
-        (
-            "SG&A",
-            sga_value,
-            opex.get("sga_pct_rev"),
-            opex.get("sga_yoy_pp"),
-            795.0,
-        ),
+    configured_expenses = [
+        item for item in opex.get("items") or [] if item.get("amount") is not None
     ]
+    show_expense_pp = True
+    if configured_expenses:
+        entries = [
+            (
+                str(item.get("name") or ""),
+                float(item["amount"]),
+                item.get("pct_rev"),
+                item.get("yoy_pp"),
+            )
+            for item in configured_expenses[:4]
+        ]
+        entries = [entry for entry in entries if entry[1] > 0]
+        pitch = (1035.0 - 615.0) / max(len(entries), 1)
+        expense_items = [
+            (name, value, pct, pp, 615.0 + index * pitch)
+            for index, (name, value, pct, pp) in enumerate(entries)
+        ]
+        show_expense_pp = len(entries) <= 3
+    else:
+        expense_items = [
+            (
+                "R&D",
+                rd_value,
+                opex.get("rd_pct_rev"),
+                opex.get("rd_yoy_pp"),
+                640.0,
+            ),
+            (
+                "SG&A",
+                sga_value,
+                opex.get("sga_pct_rev"),
+                opex.get("sga_yoy_pp"),
+                795.0,
+            ),
+        ]
     expense_cursor = opex_top
     for name, value, pct, pp, top in expense_items:
         if value <= 0:
             continue
         item_height = height(value, 12)
+        source_height = height(value)
         _ribbon(
             ax,
             x_operating + operating_width,
             expense_cursor,
-            min(expense_cursor + item_height, opex_bottom),
+            min(expense_cursor + source_height, opex_bottom),
             x_final,
             top,
             top + item_height,
             RED_FLOW,
         )
-        expense_cursor += item_height
+        expense_cursor += source_height
         _bar(ax, x_final, top, final_width, item_height, RED_BAR)
         ax.text(1815, top + 8, name, ha="center", color=RED, **_font(17, "bold"))
         ax.text(
@@ -837,7 +1569,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
                 color=MUTED,
                 **_font(14),
             )
-        if pp is not None:
+        if pp is not None and show_expense_pp:
             ax.text(1815, top + 105, _pp(pp), ha="center", color=MUTED, **_font(13))
 
     source_label = _source_label(data)

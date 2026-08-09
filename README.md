@@ -13,6 +13,17 @@ The chart includes:
 - Recomputed year-over-year growth and margin changes
 - Source labels from company investor relations or regulatory filings
 
+Two layouts are available:
+
+- **Default** — product/service companies. Revenue groups and optional segments
+  on the left, then gross profit, operating profit, and net profit.
+- **Conglomerate** (`layout.style: "conglomerate"`) — insurers, banks, and
+  holding companies. Reported business segments each carry their own margin,
+  revenue splits straight into operating profit and operating costs with no
+  invented gross-profit line, and operating profit plus investment gains feed a
+  pre-tax node. Segment profits must reconcile to operating profit.
+  Example: `income-statement-sankey/scripts/examples/brk_q2_2026_conglomerate.json`.
+
 ## Install
 
 Clone the repository and link the skill into your Codex skills directory:

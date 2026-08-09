@@ -51,6 +51,23 @@ Match the geometry in the self-generated `assets/reference-output.png`.
   monochrome mark while preserving its silhouette
 - Keep all text within the 2000x1122 canvas and visually inspect every output
 
+## Conglomerate style column order
+
+Selected by `layout.style: "conglomerate"` (see `data-schema.md`). Same canvas,
+palette, and typography; different columns:
+
+1. **Segment bars** (up to 9), each labelled with amount, Y/Y, and its own margin
+2. Optional **Other** revenue inflow (green) merging into the revenue bar
+3. **Total Revenue** (black bar under the company logo/name)
+4. Split to **Operating profit** (green) + **Operating costs and expenses** (red)
+5. **Investment gains** and **Other** as green inflow bars below operating profit
+6. All three merge into the **pre-tax** node
+7. Pre-tax splits to **Net profit** + **Tax**
+
+Segment slots are sized from each label's real line count, so long segment names
+never collide; the left band is `236..1040`, with the revenue-side Other node
+reserved out of it.
+
 ## Company-specific segments
 
 | Ticker | Typical product segments | Services |

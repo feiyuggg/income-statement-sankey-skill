@@ -138,3 +138,76 @@ net_profit + tax ~= operating_profit + other_income
 `validate_data.py` uses the larger of 0.01 units or 0.01% of revenue unless
 `--tolerance` is supplied. Use unrounded reported values so strict validation
 does not hide material differences.
+
+## Conglomerate / financial style (`layout.style: "conglomerate"`)
+
+Insurers, banks, and holding companies report **business segments**, not a
+product/service split, and have no meaningful gross profit or R&D line. The
+default schema hard-requires `gross_profit`, `cogs`, `opex.rd`, and `opex.sga`,
+so it cannot describe them without inventing figures. Setting `layout.style`
+to `"conglomerate"` selects a second layout and a matching validation branch:
+
+```
+segments (+ revenue_other) -> Revenue
+Revenue -> operating_profit + operating_costs
+operating_profit + investment_gains + other_income -> pretax_profit
+pretax_profit -> net_profit + tax
+```
+
+No gross-profit column, no COGS column, no opex breakdown column.
+
+```json
+{
+  "layout": { "style": "conglomerate" },
+  "footer_note": "Segment margin = segment EBT / segment revenues",
+  "segments": [
+    { "name": "Insurance", "revenue": 26.176, "profit": 5.865,
+      "yoy_pct": -0.3, "margin_pct": 22.4 },
+    { "name": "BNSF", "revenue": 6.601, "profit": 2.061,
+      "yoy_pct": 14.4, "margin_pct": 31.2 }
+  ],
+  "revenue_other": { "name": "Other", "amount": 0.794 },
+  "total_revenue": { "revenue": 101.808, "yoy_pct": 10.0 },
+  "operating_profit": { "amount": 14.376, "margin_pct": 14.1, "margin_yoy_pp": -0.3 },
+  "operating_costs": { "amount": 87.432 },
+  "investment_gains": { "amount": 16.077 },
+  "other_income": 1.610,
+  "pretax_profit": { "amount": 32.063, "label": "Net profit before tax" },
+  "net_profit": { "amount": 25.772, "margin_pct": 25.3, "margin_yoy_pp": 11.8 },
+  "tax": 6.291,
+  "prior_period": {
+    "total_revenue": 92.515,
+    "operating_profit": 13.378,
+    "net_profit": 12.457,
+    "segments": [{ "name": "Insurance", "revenue": 26.248, "profit": 6.537 }]
+  }
+}
+```
+
+| Field | Meaning |
+|-------|---------|
+| `segments[].profit` | **Required.** Segment earnings before income taxes. Segment profits must sum to `operating_profit`, which is what makes the segment table auditable. |
+| `segments[].margin_pct` | **Required.** Verified against `profit / revenue`. |
+| `revenue_other` | Reconciling revenue (corporate, eliminations) drawn as a green inflow merging into the revenue bar. |
+| `operating_costs` | Total costs and expenses of the operating businesses. Replaces `cogs` + `opex`. |
+| `investment_gains` | Non-operating investment gains/losses; drawn as an inflow to the pre-tax node. May be negative. |
+| `pretax_profit.label` | Optional node label, e.g. `"Net profit before tax"`. |
+| `footer_note` | Optional extra footer clause appended after the source labels. |
+| `prior_period.segments[]` | Prior-year segment revenue keyed by `name`, used to recompute each segment's Y/Y. |
+
+### Identity checks (conglomerate)
+
+```
+sum(segments.revenue) + revenue_other.amount ~= total_revenue.revenue
+sum(segments.profit)                         ~= operating_profit
+operating_profit + operating_costs           ~= total_revenue.revenue
+operating_profit + investment_gains + other_income ~= pretax_profit
+net_profit + tax                             ~= pretax_profit
+```
+
+Every Y/Y and `margin_yoy_pp` is recomputed from `prior_period`, exactly as in
+the default branch. Because `net_profit + tax` must equal pre-tax profit
+exactly, use **total net earnings** here and state the amount attributable to
+shareholders in the write-up. Up to 9 segments are supported.
+
+Working example: `scripts/examples/brk_q2_2026_conglomerate.json`.

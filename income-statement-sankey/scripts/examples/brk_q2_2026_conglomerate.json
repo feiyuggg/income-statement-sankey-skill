@@ -1,0 +1,69 @@
+{
+  "company": "Berkshire Hathaway",
+  "ticker": "BRK.B",
+  "period_label": "Q2 2026",
+  "period_end": "2026-06-30",
+  "period_end_label": "Ending June 2026",
+  "currency": "USD",
+  "unit": "B",
+  "layout": { "style": "conglomerate" },
+  "brand": {
+    "logo_text": "BRK.B"
+  },
+  "footer_note": "Segment margin = segment earnings before income taxes / segment revenues",
+  "source_records": [
+    {
+      "label": "Berkshire Hathaway Q2 2026 Form 10-Q, Note 24 Business segment data",
+      "type": "quarterly_report",
+      "publisher": "Berkshire Hathaway Inc.",
+      "retrieved_on": "2026-08-09",
+      "url": "https://www.berkshirehathaway.com/qtrly/2ndqtr26.pdf"
+    },
+    {
+      "label": "Berkshire Hathaway Q2 2026 earnings press release",
+      "type": "official_ir",
+      "publisher": "Berkshire Hathaway Inc.",
+      "retrieved_on": "2026-08-09",
+      "url": "https://www.berkshirehathaway.com/news/aug0826.pdf"
+    }
+  ],
+
+  "segments": [
+    { "name": "Insurance", "revenue": 26.176, "profit": 5.865, "yoy_pct": -0.3, "margin_pct": 22.4 },
+    { "name": "Manufacturing", "revenue": 22.568, "profit": 4.117, "yoy_pct": 13.0, "margin_pct": 18.2 },
+    { "name": "Pilot", "revenue": 14.932, "profit": 0.290, "yoy_pct": 47.7, "margin_pct": 1.9 },
+    { "name": "McLane", "revenue": 12.118, "profit": 0.173, "yoy_pct": -3.8, "margin_pct": 1.4 },
+    { "name": "Service and retailing", "revenue": 11.884, "profit": 1.266, "yoy_pct": 11.2, "margin_pct": 10.7 },
+    { "name": "BHE", "revenue": 6.735, "profit": 0.604, "yoy_pct": 4.9, "margin_pct": 9.0 },
+    { "name": "BNSF", "revenue": 6.601, "profit": 2.061, "yoy_pct": 14.4, "margin_pct": 31.2 }
+  ],
+  "revenue_other": { "name": "Other", "amount": 0.794 },
+  "total_revenue": { "revenue": 101.808, "yoy_pct": 10.0 },
+
+  "operating_profit": { "amount": 14.376, "margin_pct": 14.1, "margin_yoy_pp": -0.3 },
+  "operating_costs": { "amount": 87.432 },
+
+  "investment_gains": { "amount": 16.077 },
+  "other_income": 1.610,
+  "pretax_profit": { "amount": 32.063, "label": "Net profit before tax" },
+
+  "net_profit": { "amount": 25.772, "margin_pct": 25.3, "margin_yoy_pp": 11.8 },
+  "tax": 6.291,
+
+  "prior_period": {
+    "period_label": "Q2 2025",
+    "total_revenue": 92.515,
+    "operating_profit": 13.378,
+    "net_profit": 12.457,
+    "segments": [
+      { "name": "Insurance", "revenue": 26.248, "profit": 6.537 },
+      { "name": "Manufacturing", "revenue": 19.969, "profit": 3.247 },
+      { "name": "Pilot", "revenue": 10.109, "profit": 0.119 },
+      { "name": "McLane", "revenue": 12.601, "profit": 0.176 },
+      { "name": "Service and retailing", "revenue": 10.688, "profit": 1.105 },
+      { "name": "BHE", "revenue": 6.418, "profit": 0.385 },
+      { "name": "BNSF", "revenue": 5.769, "profit": 1.809 }
+    ]
+  },
+  "estimates": []
+}

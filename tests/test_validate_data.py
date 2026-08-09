@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "income-statement-sankey"
 SAMPLE = SKILL / "scripts/examples/aapl_q3_fy26_full.json"
+CONGLOMERATE_SAMPLE = SKILL / "scripts/examples/brk_q2_2026_conglomerate.json"
 SPEC = importlib.util.spec_from_file_location(
     "validate_data", SKILL / "scripts/validate_data.py"
 )
@@ -51,6 +52,75 @@ class ValidateDataTests(unittest.TestCase):
         broken["total_revenue"]["yoy_pct"] = 999
         self.assertTrue(
             any("total_revenue YoY" in error for error in MODULE.validate(broken))
+        )
+
+
+class ConglomerateValidateTests(unittest.TestCase):
+    """The conglomerate style drops gross profit and R&D, so its guardrails
+    have to come from tying the segment footnote back to the totals."""
+
+    def setUp(self) -> None:
+        self.data = json.loads(CONGLOMERATE_SAMPLE.read_text())
+
+    def test_sample_is_valid(self) -> None:
+        self.assertEqual(MODULE.validate(self.data), [])
+
+    def test_rejects_segment_profits_not_summing_to_operating_profit(self) -> None:
+        broken = copy.deepcopy(self.data)
+        broken["segments"][0]["profit"] += 1.0
+        self.assertTrue(
+            any(
+                "segment profits -> operating profit" in error
+                for error in MODULE.validate(broken)
+            )
+        )
+
+    def test_rejects_fabricated_segment_margin(self) -> None:
+        broken = copy.deepcopy(self.data)
+        broken["segments"][0]["margin_pct"] = 90.0
+        self.assertTrue(
+            any("margin_pct is 90.00" in error for error in MODULE.validate(broken))
+        )
+
+    def test_rejects_fabricated_segment_yoy(self) -> None:
+        broken = copy.deepcopy(self.data)
+        broken["segments"][0]["yoy_pct"] = 42.0
+        self.assertTrue(
+            any("segments[Insurance] YoY" in error for error in MODULE.validate(broken))
+        )
+
+    def test_requires_prior_period(self) -> None:
+        broken = copy.deepcopy(self.data)
+        del broken["prior_period"]
+        self.assertTrue(
+            any("prior_period is required" in error for error in MODULE.validate(broken))
+        )
+
+    def test_rejects_missing_segment_profit(self) -> None:
+        broken = copy.deepcopy(self.data)
+        del broken["segments"][0]["profit"]
+        self.assertTrue(
+            any(
+                "every segment requires a profit figure" in error
+                for error in MODULE.validate(broken)
+            )
+        )
+
+    def test_rejects_spoofed_official_url(self) -> None:
+        broken = copy.deepcopy(self.data)
+        broken["source_records"][0]["url"] = "https://stockanalysis.com/brk.pdf"
+        self.assertTrue(
+            any("not acceptable" in error for error in MODULE.validate(broken))
+        )
+
+    def test_rejects_unbalanced_pretax(self) -> None:
+        broken = copy.deepcopy(self.data)
+        broken["tax"] += 1.0
+        self.assertTrue(
+            any(
+                "net profit + tax -> pre-tax profit" in error
+                for error in MODULE.validate(broken)
+            )
         )
 
 

@@ -102,6 +102,216 @@ def _validate_source_record(record: dict[str, Any], index: int) -> list[str]:
     return errors
 
 
+def _validate_conglomerate(
+    data: dict[str, Any],
+    revenue: float,
+    tol: float,
+    yoy_tol: float,
+    ratio_tol: float,
+    identity: Any,
+) -> list[str]:
+    """Checks for `layout.style == "conglomerate"`.
+
+    Insurers, banks, and holding companies report business segments rather than
+    a product/service split, and have no meaningful gross profit or R&D line.
+    This branch drops those requirements and instead ties the segment footnote
+    to the consolidated totals, so the numbers still cannot be fabricated:
+    segment profits must sum to operating profit, and every Y/Y and margin
+    change is recomputed from `prior_period`.
+    """
+    errors: list[str] = []
+
+    segments = data.get("segments")
+    if not isinstance(segments, list) or len(segments) < 2:
+        errors.append("segments must contain at least two reported business segments")
+        segments = []
+
+    names: set[str] = set()
+    revenue_sum = 0.0
+    profit_sum = 0.0
+    profits_complete = bool(segments)
+    for index, segment in enumerate(segments):
+        if not isinstance(segment, dict):
+            errors.append(f"segments[{index}] must be an object")
+            profits_complete = False
+            continue
+        name = str(segment.get("name") or "").strip()
+        value = _num(segment.get("revenue"))
+        profit = _num(segment.get("profit"))
+        yoy = _num(segment.get("yoy_pct"))
+        margin = _num(segment.get("margin_pct"))
+        if not name:
+            errors.append(f"segments[{index}].name is required")
+        elif name in names:
+            errors.append(f"duplicate segment name: {name}")
+        else:
+            names.add(name)
+        if value is None or value <= 0:
+            errors.append(f"segments[{index}].revenue must be positive")
+        else:
+            revenue_sum += value
+        if yoy is None:
+            errors.append(f"missing required number: segments[{index}].yoy_pct")
+        if margin is None:
+            errors.append(f"missing required number: segments[{index}].margin_pct")
+        if profit is None:
+            profits_complete = False
+        else:
+            profit_sum += profit
+            if margin is not None and value:
+                expected = profit / value * 100
+                if abs(expected - margin) > ratio_tol:
+                    errors.append(
+                        f"segments[{index}].margin_pct is {margin:.2f}, "
+                        f"expected {expected:.2f}"
+                    )
+
+    other_revenue = _nested(data, "revenue_other", "amount")
+    if data.get("revenue_other") is not None and (
+        other_revenue is None or other_revenue <= 0
+    ):
+        errors.append("revenue_other.amount must be positive when present")
+    identity(
+        "segments + revenue_other -> total revenue",
+        revenue_sum + (other_revenue or 0.0),
+        revenue,
+    )
+
+    operating_profit = _require_number(
+        errors, data, "operating_profit", "amount", positive=True
+    )
+    operating_costs = _require_number(
+        errors, data, "operating_costs", "amount", positive=True
+    )
+    identity(
+        "operating profit + operating costs -> total revenue",
+        None
+        if operating_profit is None or operating_costs is None
+        else operating_profit + operating_costs,
+        revenue,
+    )
+    if profits_complete:
+        identity("segment profits -> operating profit", profit_sum, operating_profit)
+    else:
+        errors.append(
+            "every segment requires a profit figure so operating profit can be verified"
+        )
+
+    invest = _nested(data, "investment_gains", "amount")
+    if invest is None:
+        errors.append("missing required number: investment_gains.amount")
+    other_income = _num(data.get("other_income"))
+    if other_income is None:
+        errors.append("missing required number: other_income")
+    pretax = _require_number(errors, data, "pretax_profit", "amount", positive=True)
+    identity(
+        "operating profit + investment gains + other -> pre-tax profit",
+        None
+        if operating_profit is None or invest is None or other_income is None
+        else operating_profit + invest + other_income,
+        pretax,
+    )
+
+    net_profit = _require_number(errors, data, "net_profit", "amount", positive=True)
+    tax = _num(data.get("tax"))
+    if tax is None:
+        errors.append("missing required number: tax")
+    identity(
+        "net profit + tax -> pre-tax profit",
+        None if net_profit is None or tax is None else net_profit + tax,
+        pretax,
+    )
+
+    for path, amount in (
+        ("operating_profit", operating_profit),
+        ("net_profit", net_profit),
+    ):
+        margin = _nested(data, path, "margin_pct")
+        if margin is None:
+            errors.append(f"missing required number: {path}.margin_pct")
+        elif amount is not None:
+            expected = amount / revenue * 100
+            if abs(expected - margin) > ratio_tol:
+                errors.append(
+                    f"{path}.margin_pct is {margin:.2f}, expected {expected:.2f}"
+                )
+
+    prior = data.get("prior_period")
+    if not isinstance(prior, dict):
+        errors.append("prior_period is required to verify YoY and margin changes")
+        prior = {}
+    prior_revenue = _num(prior.get("total_revenue"))
+    if prior_revenue is None or prior_revenue <= 0:
+        errors.append("prior_period.total_revenue must be positive")
+
+    def check_yoy(label: str, current: float | None, previous: float | None,
+                  reported: float | None) -> None:
+        if previous is None or previous <= 0:
+            errors.append(f"missing or invalid prior value for {label}")
+            return
+        if current is None or reported is None:
+            errors.append(f"missing current value or YoY metric for {label}")
+            return
+        expected = (current / previous - 1.0) * 100
+        if abs(expected - reported) > yoy_tol:
+            errors.append(f"{label} YoY is {reported:.2f}, expected {expected:.2f}")
+
+    check_yoy(
+        "total_revenue", revenue, prior_revenue, _nested(data, "total_revenue", "yoy_pct")
+    )
+
+    prior_segments = {
+        str(item.get("name") or ""): _num(item.get("revenue"))
+        for item in prior.get("segments") or []
+        if isinstance(item, dict)
+    }
+    for segment in segments:
+        if not isinstance(segment, dict):
+            continue
+        name = str(segment.get("name") or "")
+        check_yoy(
+            f"segments[{name}]",
+            _num(segment.get("revenue")),
+            prior_segments.get(name),
+            _num(segment.get("yoy_pct")),
+        )
+
+    for path, amount in (
+        ("operating_profit", operating_profit),
+        ("net_profit", net_profit),
+    ):
+        reported = _nested(data, path, "margin_yoy_pp")
+        prior_amount = _num(prior.get(path))
+        if reported is None:
+            errors.append(f"missing required number: {path}.margin_yoy_pp")
+        elif prior_amount is None or prior_revenue is None or prior_revenue <= 0:
+            errors.append(f"missing prior value required to verify {path}.margin_yoy_pp")
+        elif amount is not None:
+            expected = amount / revenue * 100 - prior_amount / prior_revenue * 100
+            if abs(expected - reported) > yoy_tol:
+                errors.append(
+                    f"{path}.margin_yoy_pp is {reported:.2f}, expected {expected:.2f}"
+                )
+
+    source_records = data.get("source_records")
+    if not isinstance(source_records, list) or not source_records:
+        errors.append("source_records must include at least one source")
+    else:
+        for index, record in enumerate(source_records):
+            if not isinstance(record, dict):
+                errors.append(f"source_records[{index}] must be an object")
+                continue
+            errors.extend(_validate_source_record(record, index))
+        if not any(
+            str(record.get("type") or "").lower() in OFFICIAL_SOURCE_TYPES
+            for record in source_records
+            if isinstance(record, dict)
+        ):
+            errors.append("source_records must include an official or regulatory source")
+
+    return errors
+
+
 def validate(data: dict[str, Any], tolerance: float | None = None) -> list[str]:
     errors: list[str] = []
     required_text = ("company", "period_label", "period_end_label", "currency", "unit")
@@ -127,6 +337,12 @@ def validate(data: dict[str, Any], tolerance: float | None = None) -> list[str]:
                 f"{label} does not reconcile: {left:.3f} vs {right:.3f} "
                 f"(difference {abs(left - right):.3f}, tolerance {tol:.3f})"
             )
+
+    if str((data.get("layout") or {}).get("style") or "").lower() == "conglomerate":
+        errors.extend(
+            _validate_conglomerate(data, revenue, tol, yoy_tol, ratio_tol, identity)
+        )
+        return errors
 
     groups = data.get("revenue_groups")
     if not isinstance(groups, list) or len(groups) < 2:

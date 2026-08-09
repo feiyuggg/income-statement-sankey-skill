@@ -1,0 +1,45 @@
+[
+  {
+    "name": "iPhone",
+    "revenue": 54.3,
+    "yoy_pct": 22,
+    "group": "products"
+  },
+  {
+    "name": "Mac",
+    "revenue": 10.4,
+    "yoy_pct": 29,
+    "group": "products",
+    "subtitle": "Air, Pro, Mini"
+  },
+  {
+    "name": "iPad",
+    "revenue": 6.2,
+    "yoy_pct": -6,
+    "group": "products"
+  },
+  {
+    "name": "Watch / AirPods",
+    "revenue": 7.9,
+    "yoy_pct": 6,
+    "group": "products",
+    "subtitle": "Wearables, Home, and Accessories"
+  },
+  {
+    "is_products_total": true,
+    "revenue": 78.7,
+    "yoy_pct": 18
+  },
+  {
+    "is_services_total": true,
+    "revenue": 30.7,
+    "yoy_pct": 12
+  },
+  {
+    "_meta": true,
+    "cogs_products": 47.1,
+    "cogs_services": 7.5,
+    "products_gm_pct": 40,
+    "services_gm_pct": 76
+  }
+]

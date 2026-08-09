@@ -56,6 +56,11 @@ uv run <SKILL_DIR>/scripts/build_chart.py \
 - Supply `prior_period` so the validator can recompute YoY and margin changes.
 - Keep reported company taxonomy. Do not force every company into
   Products/Services. Use `revenue_groups` for arbitrary business groups.
+- For conglomerates, insurers, banks, and holding companies, use the reported
+  **business segment** footnote rather than income-statement line items, and set
+  `layout.style: "conglomerate"`. That layout has no gross-profit line, so none
+  has to be invented; segment profits must reconcile to operating profit. See
+  `references/data-schema.md`.
 - Require at least two company-reported revenue groups. Product/category
   segments may be omitted only when the official filing does not disclose them.
 - Treat negative other income as an expense and color it red.
