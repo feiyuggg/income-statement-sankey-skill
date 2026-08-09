@@ -23,29 +23,79 @@ baseline.
    values. Record publisher, retrieval date, source labels, and URLs in
    `source_records`.
 5. Build one complete JSON file following `references/data-schema.md`.
-6. Run strict validation:
+6. Prefer the local Python runtime when it already has `matplotlib` and
+   `Pillow`; this avoids repeated `uv` dependency resolution and network
+   retries. Check once per session:
 
 ```bash
-uv run <SKILL_DIR>/scripts/validate_data.py DATA.json
+python3 -c 'import matplotlib, PIL'
 ```
 
-7. Render only after validation passes:
+7. Validate and render through the fast path. It combines strict validation,
+   rendering, parallel workers, and a content-hash cache:
 
 ```bash
-uv run <SKILL_DIR>/scripts/build_chart.py \
+python3 <SKILL_DIR>/scripts/build_batch.py DATA.json \
+  --out-dir OUTPUT_DIR
+```
+
+If the import check fails, replace `python3` with `uv run` in that command.
+The legacy separate validator remains available when diagnosing bad data:
+
+```bash
+python3 <SKILL_DIR>/scripts/validate_data.py DATA.json
+```
+
+8. For a single custom output filename, the compatible one-shot command is:
+
+```bash
+python3 <SKILL_DIR>/scripts/build_chart.py \
   --from-json DATA.json \
   --validate \
   -o OUTPUT.png
 ```
 
-8. Inspect the PNG before delivery. Compare the composition with
+9. Inspect the PNG before delivery. Compare the composition with
    `assets/reference-layout.jpg` and the renderer result with
    `assets/reference-output.png`; fix clipping, overlap, wrong ordering, or
    unreadable labels.
-9. Return the PNG plus a concise analysis of revenue mix, growth, margins, and
+10. Return the PNG plus a concise analysis of revenue mix, growth, margins, and
    unusual movements. Cite the official sources used.
 
 `<SKILL_DIR>` is the directory containing this `SKILL.md`.
+
+## Fast path for multiple periods
+
+When the user requests multiple quarters or companies, avoid repeating the
+single-chart workflow from scratch:
+
+1. Resolve the full official report list once before extraction. Download or
+   open each official document once and keep a shared manifest containing the
+   period, publication date, official URL, and local cached path.
+2. Extract independent periods in parallel, with one bounded worker per period
+   and at most six workers. Give every worker the shared manifest and one output
+   JSON path; do not let workers rediscover the report list.
+3. Reuse a period ledger for overlapping comparisons. If Q2 2025 is already an
+   extracted current period, reuse its values as the prior period for Q2 2026
+   instead of opening and extracting the same disclosure again.
+4. Run one batch command after all JSON files exist:
+
+```bash
+python3 <SKILL_DIR>/scripts/build_batch.py DATA_DIR/*.json \
+  --out-dir OUTPUT_DIR --jobs 5
+```
+
+5. Keep the `.sankey-cache.json` sidecars. Unchanged JSON plus unchanged
+   renderer code is reported as `CACHED` and is not rendered again. Use
+   `--force` only after an external asset changed without a JSON or renderer
+   change.
+6. Do a two-level visual check: scan all outputs together at reduced size, then
+   inspect only suspicious charts at full resolution. Every final PNG still
+   requires a visual verdict; the contact scan only avoids repeatedly opening
+   obviously clean charts at full size.
+
+Do not parallelize dependent work: period discovery must finish before
+quarter-specific extraction, and every JSON must validate before deployment.
 
 ## Data rules
 
@@ -113,10 +163,9 @@ uv run <SKILL_DIR>/scripts/build_chart.py AAPL \
 Render the deterministic example:
 
 ```bash
-uv run <SKILL_DIR>/scripts/build_chart.py \
-  --from-json <SKILL_DIR>/scripts/examples/aapl_q3_fy26_full.json \
-  --validate \
-  -o /tmp/aapl-reference-test.png
+python3 <SKILL_DIR>/scripts/build_batch.py \
+  <SKILL_DIR>/scripts/examples/aapl_q3_fy26_full.json \
+  --out-dir /tmp/income-sankey-render
 ```
 
 ## Delivery checklist

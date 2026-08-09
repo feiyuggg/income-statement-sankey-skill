@@ -34,10 +34,21 @@ ln -s "$PWD/income-statement-sankey-skill/income-statement-sankey" \
 校验和生成：
 
 ```bash
-uv run income-statement-sankey/scripts/validate_data.py DATA.json
-uv run income-statement-sankey/scripts/build_chart.py \
-  --from-json DATA.json --validate -o OUTPUT.png
+python3 income-statement-sankey/scripts/build_batch.py DATA.json \
+  --out-dir OUTPUT_DIR
 ```
+
+批量生成时可以一次传入多个 JSON，脚本会先统一校验，再并行渲染，并用内容哈希
+缓存跳过没有变化的图。这样不会在每张图上重复加载 `yfinance/pandas` 或反复解析
+依赖：
+
+```bash
+python3 income-statement-sankey/scripts/build_batch.py data/*.json \
+  --out-dir output --jobs 5
+```
+
+如果本机 Python 尚未安装 `matplotlib` 和 `Pillow`，将 `python3` 替换为
+`uv run` 即可。`fetch_income.py` 仍单独保留 `yfinance`，只用于辅助交叉核验。
 
 ### 生成效果参考
 
@@ -114,22 +125,21 @@ The skill directs Codex to:
 ## Validate And Render
 
 ```bash
-uv run income-statement-sankey/scripts/validate_data.py DATA.json
-
-uv run income-statement-sankey/scripts/build_chart.py \
-  --from-json DATA.json \
-  --validate \
-  -o OUTPUT.png
+python3 income-statement-sankey/scripts/build_batch.py DATA.json \
+  --out-dir OUTPUT_DIR
 ```
 
 Render the bundled verified example:
 
 ```bash
-uv run income-statement-sankey/scripts/build_chart.py \
-  --from-json income-statement-sankey/scripts/examples/aapl_q3_fy26_full.json \
-  --validate \
-  -o /tmp/aapl-income-statement.png
+python3 income-statement-sankey/scripts/build_batch.py \
+  income-statement-sankey/scripts/examples/aapl_q3_fy26_full.json \
+  --out-dir /tmp/income-sankey-render
 ```
+
+For several verified periods, pass all JSON files in one command and set
+`--jobs` to the desired parallelism. The generated `.sankey-cache.json`
+sidecars prevent unchanged charts from being rendered again.
 
 ## Data Integrity
 
