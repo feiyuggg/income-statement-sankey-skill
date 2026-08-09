@@ -1423,11 +1423,19 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
             GREEN_FLOW,
         )
         _bar(ax, x_other, other_top, other_width, other_height, RED_BAR)
+        remaining_bottom = other_top + other_height
+        tax_source_height = (
+            min(tax_height, max(remaining_bottom - remaining_top, 0.0))
+            if tax_height > 0
+            else 0.0
+        )
+        tax_source_top = remaining_bottom - tax_source_height
+        net_source_bottom = tax_source_top if tax_height > 0 else remaining_bottom
         _ribbon(
             ax,
             x_other + other_width,
             remaining_top,
-            remaining_top + net_height,
+            net_source_bottom,
             x_final,
             net_top,
             net_bottom,
@@ -1437,8 +1445,8 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
             _ribbon(
                 ax,
                 x_other + other_width,
-                remaining_top + net_height,
-                remaining_top + net_height + tax_height,
+                tax_source_top,
+                remaining_bottom,
                 x_final,
                 tax_top,
                 tax_top + tax_height,
