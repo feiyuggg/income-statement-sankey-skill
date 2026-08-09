@@ -131,6 +131,20 @@ quarter-specific extraction, and every JSON must validate before deployment.
   cost ribbons on a light-gray background.
 - Use direct labels, not floating cards.
 - Keep labels outside ribbons and maintain proportional bar/ribbon thickness.
+- Compute the right-side profit layout from rendered heights instead of fixed
+  Y coordinates. Net profit/loss, Tax, and expense-detail sinks must be stacked
+  with explicit vertical gaps, including enough clearance for the four-line net
+  label block when the net bar is short.
+- When positive non-operating income is unusually large, place its source bar
+  below the operating-expense bar and keep its bottom above the footer when
+  possible. Do not put horizontal text inside a narrow source bar; move the
+  label into adjacent whitespace instead.
+- Put the Operating expenses label in the open gap between operating profit and
+  the expense bar when that gap can contain the complete three-line label;
+  otherwise place it below the expense bar.
+- Left-align long expense-detail labels to the right of their sink bars. Hide
+  optional YoY percentage-point copy when the available per-item pitch is too
+  small to keep adjacent labels separated.
 - Keep every detail ribbon's source interval inside its parent bar. Minimum
   visible heights may enlarge destination bars, but must not be reused for
   source-flow accounting or cumulative source cursors.

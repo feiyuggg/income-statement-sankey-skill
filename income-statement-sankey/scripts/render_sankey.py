@@ -151,6 +151,55 @@ def _bounded_stacked_spans(
     return spans
 
 
+def _right_profit_layout(
+    *,
+    net_height: float,
+    tax_height: float,
+    operating_bottom: float,
+    opex_top: float,
+    opex_bottom: float,
+    other_height: float,
+    other_bar_width: float,
+    net_is_loss: bool,
+    other_inflow: bool,
+) -> dict[str, float | bool]:
+    if net_is_loss:
+        net_top = 280.0
+        tax_top = net_top + net_height + 20.0
+    else:
+        net_top = 310.0
+        if tax_height > 0:
+            net_top = min(
+                net_top,
+                max(245.0, 640.0 - tax_height - 20.0 - net_height),
+            )
+        tax_top = max(net_top + net_height + 20.0, net_top + 170.0)
+
+    opex_label_in_gap = opex_top - operating_bottom >= 104.0
+    opex_label_top = (
+        operating_bottom + 12.0 if opex_label_in_gap else opex_bottom + 28.0
+    )
+
+    other_source_top = opex_bottom + 28.0
+    if other_inflow:
+        other_source_top = max(
+            other_source_top,
+            min(720.0, 1005.0 - other_height),
+        )
+
+    return {
+        "net_top": net_top,
+        "tax_top": tax_top,
+        "opex_label_top": opex_label_top,
+        "opex_label_in_gap": opex_label_in_gap,
+        "other_source_top": other_source_top,
+        "other_label_inside": (
+            other_inflow and other_height >= 90.0 and other_bar_width >= 120.0
+        ),
+        "expense_start": max(615.0, tax_top + tax_height + 60.0),
+    }
+
+
 def _font(size: float, weight: str = "normal") -> dict[str, Any]:
     return {
         "fontsize": size * 100 / _FONT_DPI,
@@ -1317,32 +1366,6 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         color=MUTED,
         **_font(14),
     )
-    opex_label_top = opex_bottom + 28.0
-    ax.text(
-        1440,
-        opex_label_top,
-        "Operating",
-        ha="center",
-        color=RED,
-        **_font(19, "bold"),
-    )
-    ax.text(
-        1440,
-        opex_label_top + 32.0,
-        "expenses",
-        ha="center",
-        color=RED,
-        **_font(19, "bold"),
-    )
-    ax.text(
-        1440,
-        opex_label_top + 72.0,
-        _money(opex_value, unit, True),
-        ha="center",
-        color=RED,
-        **_font(18),
-    )
-
     cogs_parts: list[tuple[str, float, Any]] = []
     for part in cogs.get("parts") or []:
         if part.get("amount") is None:
@@ -1422,13 +1445,51 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
 
     net_height = height(net_value)
     net_is_loss = net_value < 0
-    net_top = 280.0 if net_is_loss else 310.0
-    net_bottom = net_top + net_height
     tax_height = height(tax_value, 11) if tax_value > 0 else 0.0
     tax_accounting_height = height(tax_value) if tax_value > 0 else 0.0
-    tax_top = net_bottom + 20.0 if net_is_loss else 495.0
     other_inflow = other_value > 0.05
+    other_height = height(other_value, 10) if other_inflow else 0.0
+    right_layout = _right_profit_layout(
+        net_height=net_height,
+        tax_height=tax_height,
+        operating_bottom=operating_bottom,
+        opex_top=opex_top,
+        opex_bottom=opex_bottom,
+        other_height=other_height,
+        other_bar_width=operating_width,
+        net_is_loss=net_is_loss,
+        other_inflow=other_inflow,
+    )
+    net_top = float(right_layout["net_top"])
+    net_bottom = net_top + net_height
+    tax_top = float(right_layout["tax_top"])
     x_source = x_operating + operating_width
+
+    opex_label_top = float(right_layout["opex_label_top"])
+    ax.text(
+        1440,
+        opex_label_top,
+        "Operating",
+        ha="center",
+        color=RED,
+        **_font(19, "bold"),
+    )
+    ax.text(
+        1440,
+        opex_label_top + 32.0,
+        "expenses",
+        ha="center",
+        color=RED,
+        **_font(19, "bold"),
+    )
+    ax.text(
+        1440,
+        opex_label_top + 72.0,
+        _money(opex_value, unit, True),
+        ha="center",
+        color=RED,
+        **_font(18),
+    )
 
     if net_is_loss:
         other_height = height(abs(other_value), 10)
@@ -1520,8 +1581,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         # Positive non-operating income adds to profit, so route it as an
         # inflow that merges into net profit (matching the reference layout)
         # instead of an outflow leaving operating profit.
-        other_height = height(other_value, 10)
-        other_source_top = operating_bottom + 26.0
+        other_source_top = float(right_layout["other_source_top"])
         _bar(
             ax,
             x_operating,
@@ -1565,22 +1625,61 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
                 supply[1] -= take
                 cursor += target_take
                 remaining -= take
-        ax.text(
-            x_operating + operating_width / 2,
-            other_source_top + other_height + 26,
-            "Other",
-            ha="center",
-            color=GREEN,
-            **_font(17, "bold"),
-        )
-        ax.text(
-            x_operating + operating_width / 2,
-            other_source_top + other_height + 58,
-            _money(other_value, unit),
-            ha="center",
-            color=GREEN,
-            **_font(15),
-        )
+        if right_layout["other_label_inside"]:
+            other_center = other_source_top + other_height / 2
+            ax.text(
+                x_operating + operating_width / 2,
+                other_center - 17,
+                "Other income",
+                ha="center",
+                color="white",
+                zorder=12,
+                **_font(15, "bold"),
+            )
+            ax.text(
+                x_operating + operating_width / 2,
+                other_center + 18,
+                _money(other_value, unit),
+                ha="center",
+                color="white",
+                zorder=12,
+                **_font(14),
+            )
+        elif other_height >= 90.0:
+            other_center = other_source_top + other_height / 2
+            ax.text(
+                x_operating - 18,
+                other_center - 17,
+                "Other income",
+                ha="right",
+                color=GREEN,
+                **_font(15, "bold"),
+            )
+            ax.text(
+                x_operating - 18,
+                other_center + 18,
+                _money(other_value, unit),
+                ha="right",
+                color=GREEN,
+                **_font(14),
+            )
+        else:
+            ax.text(
+                x_operating + operating_width / 2,
+                other_source_top + other_height + 26,
+                "Other",
+                ha="center",
+                color=GREEN,
+                **_font(17, "bold"),
+            )
+            ax.text(
+                x_operating + operating_width / 2,
+                other_source_top + other_height + 58,
+                _money(other_value, unit),
+                ha="center",
+                color=GREEN,
+                **_font(15),
+            )
     else:
         other_expense_height = (
             height(abs(other_value)) if other_value < -0.05 else 0.0
@@ -1693,10 +1792,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
     configured_expenses = [
         item for item in opex.get("items") or [] if item.get("amount") is not None
     ]
-    expense_start = max(
-        615.0,
-        tax_top + tax_height + 74.0 if net_is_loss and tax_height > 0 else 615.0,
-    )
+    expense_start = float(right_layout["expense_start"])
     expense_bottom = 1025.0
     show_expense_pp = True
     if configured_expenses:
@@ -1715,7 +1811,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
             (name, value, pct, pp, expense_start + index * pitch)
             for index, (name, value, pct, pp) in enumerate(entries)
         ]
-        show_expense_pp = len(entries) <= 3
+        show_expense_pp = pitch >= 125.0
     else:
         expense_items = [
             (
@@ -1757,10 +1853,10 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         wrapped_name = textwrap.fill(name, width=18)
         name_lines = wrapped_name.count("\n") + 1
         ax.text(
-            1815,
+            1764,
             top + 8,
             wrapped_name,
-            ha="center",
+            ha="left",
             va="top",
             linespacing=0.92,
             color=RED,
@@ -1768,28 +1864,28 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         )
         amount_y = top + 48 + (name_lines - 1) * 24
         ax.text(
-            1815,
+            1764,
             amount_y,
             _money(value, unit, True),
-            ha="center",
+            ha="left",
             color=RED,
             **_font(15),
         )
         if pct is not None:
             ax.text(
-                1815,
+                1764,
                 amount_y + 33,
                 _percent(pct, " of revenue"),
-                ha="center",
+                ha="left",
                 color=MUTED,
                 **_font(14),
             )
         if pp is not None and show_expense_pp:
             ax.text(
-                1815,
+                1764,
                 amount_y + 63,
                 _pp(pp),
-                ha="center",
+                ha="left",
                 color=MUTED,
                 **_font(13),
             )
