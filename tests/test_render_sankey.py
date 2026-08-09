@@ -97,6 +97,51 @@ class RightProfitLayoutTests(unittest.TestCase):
         self.assertLessEqual(layout["other_source_top"] + 261.0, 1005.0)
         self.assertFalse(layout["other_label_inside"])
 
+    def test_moves_other_income_below_fallback_opex_label(self) -> None:
+        layout = MODULE._right_profit_layout(
+            net_height=80.0,
+            tax_height=20.0,
+            operating_bottom=570.0,
+            opex_top=590.0,
+            opex_bottom=630.0,
+            other_height=120.0,
+            other_bar_width=55.0,
+            net_is_loss=False,
+            other_inflow=True,
+        )
+
+        self.assertFalse(layout["opex_label_in_gap"])
+        self.assertGreaterEqual(
+            layout["other_source_top"],
+            layout["opex_label_top"] + MODULE.EXPENSE_LABEL_HEIGHT + 20.0,
+        )
+
+
+class ExpenseLabelLayoutTests(unittest.TestCase):
+    def test_centers_label_inside_a_safe_gap(self) -> None:
+        layout = MODULE._expense_label_layout(
+            upper_bottom=474.0,
+            expense_top=590.0,
+            expense_bottom=678.0,
+        )
+
+        self.assertTrue(layout["in_gap"])
+        self.assertGreaterEqual(layout["top"], 474.0 + MODULE.LABEL_CLEARANCE)
+        self.assertLessEqual(
+            layout["top"] + MODULE.EXPENSE_LABEL_HEIGHT,
+            590.0 - MODULE.LABEL_CLEARANCE,
+        )
+
+    def test_places_label_below_expense_bar_when_gap_is_too_small(self) -> None:
+        layout = MODULE._expense_label_layout(
+            upper_bottom=700.0,
+            expense_top=772.0,
+            expense_bottom=820.0,
+        )
+
+        self.assertFalse(layout["in_gap"])
+        self.assertGreaterEqual(layout["top"], 820.0 + MODULE.LABEL_CLEARANCE)
+
 
 if __name__ == "__main__":
     unittest.main()

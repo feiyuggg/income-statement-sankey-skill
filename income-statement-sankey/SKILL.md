@@ -140,8 +140,13 @@ quarter-specific extraction, and every JSON must validate before deployment.
   possible. Do not put horizontal text inside a narrow source bar; move the
   label into adjacent whitespace instead.
 - Put the Operating expenses label in the open gap between operating profit and
-  the expense bar when that gap can contain the complete three-line label;
-  otherwise place it below the expense bar.
+  the expense bar only when that gap can contain the complete three-line text
+  bounding box plus explicit clearance; otherwise place it below the expense
+  bar and move later source bars below the label block.
+- Apply the same rendered-height rule to Cost of revenue: center its complete
+  three-line label block between gross profit and the cost bar only when the
+  gap is safe, otherwise place the label below the cost bar. Do not use fixed Y
+  coordinates for either expense label.
 - Left-align long expense-detail labels to the right of their sink bars. Hide
   optional YoY percentage-point copy when the available per-item pitch is too
   small to keep adjacent labels separated.

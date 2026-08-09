@@ -151,6 +151,27 @@ def _bounded_stacked_spans(
     return spans
 
 
+EXPENSE_LABEL_HEIGHT = 98.0
+LABEL_CLEARANCE = 8.0
+
+
+def _expense_label_layout(
+    *,
+    upper_bottom: float,
+    expense_top: float,
+    expense_bottom: float,
+) -> dict[str, float | bool]:
+    gap = max(expense_top - upper_bottom, 0.0)
+    required_gap = EXPENSE_LABEL_HEIGHT + 2.0 * LABEL_CLEARANCE
+    in_gap = gap >= required_gap
+    top = (
+        upper_bottom + (gap - EXPENSE_LABEL_HEIGHT) / 2.0
+        if in_gap
+        else expense_bottom + LABEL_CLEARANCE
+    )
+    return {"top": top, "in_gap": in_gap}
+
+
 def _right_profit_layout(
     *,
     net_height: float,
@@ -175,12 +196,20 @@ def _right_profit_layout(
             )
         tax_top = max(net_top + net_height + 20.0, net_top + 170.0)
 
-    opex_label_in_gap = opex_top - operating_bottom >= 104.0
-    opex_label_top = (
-        operating_bottom + 12.0 if opex_label_in_gap else opex_bottom + 28.0
+    opex_label = _expense_label_layout(
+        upper_bottom=operating_bottom,
+        expense_top=opex_top,
+        expense_bottom=opex_bottom,
     )
+    opex_label_top = float(opex_label["top"])
+    opex_label_in_gap = bool(opex_label["in_gap"])
 
     other_source_top = opex_bottom + 28.0
+    if not opex_label_in_gap:
+        other_source_top = max(
+            other_source_top,
+            opex_label_top + EXPENSE_LABEL_HEIGHT + 20.0,
+        )
     if other_inflow:
         other_source_top = max(
             other_source_top,
@@ -1439,9 +1468,39 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
                     **_font(14),
                 )
 
-    ax.text(1158, 676, "Cost of", ha="center", color=RED, **_font(19, "bold"))
-    ax.text(1158, 708, "revenue", ha="center", color=RED, **_font(19, "bold"))
-    ax.text(1158, 748, _money(cogs_value, unit, True), ha="center", color=RED, **_font(17))
+    cogs_label = _expense_label_layout(
+        upper_bottom=gross_bottom,
+        expense_top=cogs_top,
+        expense_bottom=cogs_bottom,
+    )
+    cogs_label_top = float(cogs_label["top"])
+    ax.text(
+        1158,
+        cogs_label_top,
+        "Cost of",
+        ha="center",
+        va="top",
+        color=RED,
+        **_font(19, "bold"),
+    )
+    ax.text(
+        1158,
+        cogs_label_top + 32.0,
+        "revenue",
+        ha="center",
+        va="top",
+        color=RED,
+        **_font(19, "bold"),
+    )
+    ax.text(
+        1158,
+        cogs_label_top + 72.0,
+        _money(cogs_value, unit, True),
+        ha="center",
+        va="top",
+        color=RED,
+        **_font(17),
+    )
 
     net_height = height(net_value)
     net_is_loss = net_value < 0
@@ -1471,6 +1530,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         opex_label_top,
         "Operating",
         ha="center",
+        va="top",
         color=RED,
         **_font(19, "bold"),
     )
@@ -1479,6 +1539,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         opex_label_top + 32.0,
         "expenses",
         ha="center",
+        va="top",
         color=RED,
         **_font(19, "bold"),
     )
@@ -1487,6 +1548,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         opex_label_top + 72.0,
         _money(opex_value, unit, True),
         ha="center",
+        va="top",
         color=RED,
         **_font(18),
     )
