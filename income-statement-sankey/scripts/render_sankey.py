@@ -1298,9 +1298,31 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         color=MUTED,
         **_font(14),
     )
-    ax.text(1440, 676, "Operating", ha="center", color=RED, **_font(19, "bold"))
-    ax.text(1440, 708, "expenses", ha="center", color=RED, **_font(19, "bold"))
-    ax.text(1440, 748, _money(opex_value, unit, True), ha="center", color=RED, **_font(18))
+    opex_label_top = opex_bottom + 28.0
+    ax.text(
+        1440,
+        opex_label_top,
+        "Operating",
+        ha="center",
+        color=RED,
+        **_font(19, "bold"),
+    )
+    ax.text(
+        1440,
+        opex_label_top + 32.0,
+        "expenses",
+        ha="center",
+        color=RED,
+        **_font(19, "bold"),
+    )
+    ax.text(
+        1440,
+        opex_label_top + 72.0,
+        _money(opex_value, unit, True),
+        ha="center",
+        color=RED,
+        **_font(18),
+    )
 
     cogs_parts: list[tuple[str, float, Any]] = []
     for part in cogs.get("parts") or []:
@@ -1374,17 +1396,17 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
     ax.text(1158, 748, _money(cogs_value, unit, True), ha="center", color=RED, **_font(17))
 
     net_height = height(net_value)
-    net_top = 310.0
+    net_is_loss = net_value < 0
+    net_top = 280.0 if net_is_loss else 310.0
     net_bottom = net_top + net_height
     tax_height = height(tax_value, 11) if tax_value > 0 else 0.0
-    net_is_loss = net_value < 0
-    tax_top = net_bottom + 30.0 if net_is_loss else 495.0
+    tax_top = net_bottom + 20.0 if net_is_loss else 495.0
     other_inflow = other_value > 0.05
     x_source = x_operating + operating_width
 
     if net_is_loss:
         other_height = height(abs(other_value), 10)
-        other_top = net_top - 10.0
+        other_top = net_top
         x_other = x_source + (x_final - x_source) * 0.36
         other_width = 48.0
         offset_height = min(operating_height, other_height)
