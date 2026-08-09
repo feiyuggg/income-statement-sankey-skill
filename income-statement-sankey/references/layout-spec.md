@@ -42,6 +42,9 @@ Match the geometry in the self-generated `assets/reference-output.png`.
 
 - Bar heights proportional to dollar amount within each column
 - Flow ribbons (sankey polygons) connect columns; opacity ~0.55–0.75
+- Allocate stacked source-flow intervals from actual values and keep them
+  bounded by the parent bar. A minimum visible destination-bar height must not
+  enlarge or move the corresponding source interval.
 - Do **not** invent segment numbers - leave segments empty when unknown
 - Prefer exact reported figures over estimates; note estimates in footer if any
 - Direct labels only; do not place the chart inside cards

@@ -132,6 +132,25 @@ def _ribbon(
     )
 
 
+def _bounded_stacked_spans(
+    parent_top: float, parent_bottom: float, requested_heights: list[float]
+) -> list[tuple[float, float]]:
+    available = max(parent_bottom - parent_top, 0.0)
+    heights = [max(float(requested), 0.0) for requested in requested_heights]
+    requested_total = sum(heights)
+    if requested_total > available and requested_total > 0:
+        factor = available / requested_total
+        heights = [requested * factor for requested in heights]
+
+    spans: list[tuple[float, float]] = []
+    cursor = parent_top
+    for requested in heights:
+        span_bottom = min(cursor + requested, parent_bottom)
+        spans.append((cursor, span_bottom))
+        cursor = span_bottom
+    return spans
+
+
 def _font(size: float, weight: str = "normal") -> dict[str, Any]:
     return {
         "fontsize": size * 100 / _FONT_DPI,
@@ -1343,26 +1362,32 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
                 ("Services", float(service_cogs), cogs.get("services_gm_pct"))
             )
     if cogs_parts:
-        source_cursor = cogs_top
+        rendered_parts = cogs_parts[:2]
+        source_spans = _bounded_stacked_spans(
+            cogs_top,
+            cogs_bottom,
+            [height(value) for _, value, _ in rendered_parts],
+        )
         part_tops = [790.0, 960.0]
-        min_second_top = 790.0 + height(cogs_parts[0][1], 12) + 30.0
-        if len(cogs_parts) > 1 and part_tops[1] < min_second_top:
+        min_second_top = 790.0 + height(rendered_parts[0][1], 12) + 30.0
+        if len(rendered_parts) > 1 and part_tops[1] < min_second_top:
             part_tops[1] = min_second_top
-        for index, (name, value, margin) in enumerate(cogs_parts[:2]):
+        for index, ((name, value, margin), source_span) in enumerate(
+            zip(rendered_parts, source_spans)
+        ):
             part_height = height(value, 12)
             part_top = part_tops[index]
             part_bottom = part_top + part_height
             _ribbon(
                 ax,
                 x_gross + split_width,
-                source_cursor,
-                source_cursor + part_height,
+                source_span[0],
+                source_span[1],
                 x_cost_detail,
                 part_top,
                 part_bottom,
                 RED_FLOW,
             )
-            source_cursor += part_height
             _bar(ax, x_cost_detail, part_top, detail_width, part_height, RED_BAR)
             text_y = part_top + 18.0 if index == 0 else part_top - 42.0
             ax.text(
@@ -1400,6 +1425,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
     net_top = 280.0 if net_is_loss else 310.0
     net_bottom = net_top + net_height
     tax_height = height(tax_value, 11) if tax_value > 0 else 0.0
+    tax_accounting_height = height(tax_value) if tax_value > 0 else 0.0
     tax_top = net_bottom + 20.0 if net_is_loss else 495.0
     other_inflow = other_value > 0.05
     x_source = x_operating + operating_width
@@ -1425,7 +1451,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         _bar(ax, x_other, other_top, other_width, other_height, RED_BAR)
         remaining_bottom = other_top + other_height
         tax_source_height = (
-            min(tax_height, max(remaining_bottom - remaining_top, 0.0))
+            min(tax_accounting_height, max(remaining_bottom - remaining_top, 0.0))
             if tax_height > 0
             else 0.0
         )
@@ -1508,18 +1534,23 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
             [operating_top, operating_height],
             [other_source_top, height(other_value)],
         ]
-        for sink_top, sink_height, sink_color in (
-            (net_top, net_height, GREEN_FLOW),
-            (tax_top, tax_height, RED_FLOW),
+        for sink_top, sink_height, accounting_height, sink_color in (
+            (net_top, net_height, height(net_value), GREEN_FLOW),
+            (tax_top, tax_height, tax_accounting_height, RED_FLOW),
         ):
             cursor = sink_top
-            remaining = sink_height
+            remaining = accounting_height
             for supply in supplies:
-                if remaining <= 0.5:
+                if remaining <= 0:
                     break
                 take = min(remaining, supply[1])
-                if take <= 0.5:
+                if take <= 0:
                     continue
+                target_take = (
+                    sink_height * take / accounting_height
+                    if accounting_height > 0
+                    else 0.0
+                )
                 _ribbon(
                     ax,
                     x_source,
@@ -1527,12 +1558,12 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
                     supply[0] + take,
                     x_final,
                     cursor,
-                    cursor + take,
+                    cursor + target_take,
                     sink_color,
                 )
                 supply[0] += take
                 supply[1] -= take
-                cursor += take
+                cursor += target_take
                 remaining -= take
         ax.text(
             x_operating + operating_width / 2,
@@ -1551,11 +1582,19 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
             **_font(15),
         )
     else:
+        other_expense_height = (
+            height(abs(other_value)) if other_value < -0.05 else 0.0
+        )
+        source_spans = _bounded_stacked_spans(
+            operating_top,
+            operating_bottom,
+            [height(net_value), other_expense_height, tax_accounting_height],
+        )
         _ribbon(
             ax,
             x_source,
-            operating_top,
-            operating_top + min(net_height, operating_height),
+            source_spans[0][0],
+            source_spans[0][1],
             x_final,
             net_top,
             net_bottom,
@@ -1567,8 +1606,8 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
             _ribbon(
                 ax,
                 x_source,
-                operating_bottom - min(other_height, operating_height * 0.14),
-                operating_bottom,
+                source_spans[1][0],
+                source_spans[1][1],
                 x_final,
                 other_top,
                 other_top + other_height,
@@ -1588,8 +1627,8 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
             _ribbon(
                 ax,
                 x_source,
-                operating_bottom - min(tax_height, operating_height * 0.18),
-                operating_bottom,
+                source_spans[2][0],
+                source_spans[2][1],
                 x_final,
                 tax_top,
                 tax_top + tax_height,
@@ -1694,23 +1733,26 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
                 min(expense_start + 180.0, expense_bottom - 115.0),
             ),
         ]
-    expense_cursor = opex_top
-    for name, value, pct, pp, top in expense_items:
-        if value <= 0:
-            continue
+    rendered_expenses = [item for item in expense_items if item[1] > 0]
+    expense_source_spans = _bounded_stacked_spans(
+        opex_top,
+        opex_bottom,
+        [height(item[1]) for item in rendered_expenses],
+    )
+    for (name, value, pct, pp, top), source_span in zip(
+        rendered_expenses, expense_source_spans
+    ):
         item_height = height(value, 12)
-        source_height = height(value)
         _ribbon(
             ax,
             x_operating + operating_width,
-            expense_cursor,
-            min(expense_cursor + source_height, opex_bottom),
+            source_span[0],
+            source_span[1],
             x_final,
             top,
             top + item_height,
             RED_FLOW,
         )
-        expense_cursor += source_height
         _bar(ax, x_final, top, final_width, item_height, RED_BAR)
         wrapped_name = textwrap.fill(name, width=18)
         name_lines = wrapped_name.count("\n") + 1

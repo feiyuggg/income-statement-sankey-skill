@@ -1,11 +1,63 @@
 # Income Statement Sankey Skill
 
+## 中文说明
+
+这是一个面向 Codex 及兼容 Agent 的财报收入利润桑基图 Skill。它会优先读取
+公司投资者关系网站、财报新闻稿和监管文件，核验收入组成、同比变化、毛利、
+营业利润、税项、其他收入/费用和净利润，再生成固定为 `2000x1122` 的 PNG。
+
+主要能力：
+
+- 支持盈利与亏损财报，负净利润会显示为红色 `Net loss` 流程。
+- 支持普通产品/服务公司，以及 `layout.style: "conglomerate"` 的综合集团布局。
+- 对收入、毛利、营业利润、税前利润和净利润执行严格勾稽校验。
+- 将明细管道限制在所属父桶范围内，避免小额 Tax、COGS 或费用流发生偏移、
+  断开或越界。
+- 数据源必须来自公司官方披露或监管文件；聚合站只能用于辅助交叉检查。
+
+安装：
+
+```bash
+git clone https://github.com/feiyuggg/income-statement-sankey-skill.git
+mkdir -p ~/.codex/skills
+ln -s "$PWD/income-statement-sankey-skill/income-statement-sankey" \
+  ~/.codex/skills/income-statement-sankey
+```
+
+典型指令：
+
+```text
+给我一份英特尔最新季度财报收入图
+分析苹果收入组成和占比，生成财报桑基图
+```
+
+校验和生成：
+
+```bash
+uv run income-statement-sankey/scripts/validate_data.py DATA.json
+uv run income-statement-sankey/scripts/build_chart.py \
+  --from-json DATA.json --validate -o OUTPUT.png
+```
+
+### 生成效果参考
+
+下面是仓库内 Intel Q2 FY2026 亏损场景的确定性回归图：
+
+![Intel Q2 FY2026 net-loss income statement Sankey](income-statement-sankey/assets/intc-q2-fy2026-net-loss.png)
+
+- 在线展示参考：`https://stock.gochatagent.com/`
+- 该站点仅作为图表展示和版式参考，不是本 Skill 的官方财务数据源。
+- 实际生成时仍须打开并核验公司 IR 或监管披露，不得从参考站点直接推断财务数据。
+
+## English Overview
+
 A Codex skill that retrieves official earnings data, analyzes revenue mix and
 profit structure, validates the numbers, and renders a deterministic
 `2000x1122` income-statement Sankey PNG.
 
 The default renderer supports both net income and net loss, including small
-tax values, multi-group revenue labels, and long operating-expense names.
+tax values, multi-group revenue labels, long operating-expense names, and
+bounded detail flows that cannot extend beyond their parent nodes.
 
 The chart includes:
 
@@ -96,6 +148,8 @@ the example:
 
 - `assets/reference-layout.jpg`: the original layout reference
 - `assets/reference-output.png`: the renderer's verified output
+- `assets/intc-q2-fy2026-net-loss.png`: the verified Intel net-loss regression
+  output
 - `assets/apple-touch-icon.png`: an optional Apple brand asset
 
 The original layout reference, company logo, company names, and trademarks are

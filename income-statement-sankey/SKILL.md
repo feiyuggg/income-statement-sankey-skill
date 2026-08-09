@@ -81,6 +81,9 @@ uv run <SKILL_DIR>/scripts/build_chart.py \
   cost ribbons on a light-gray background.
 - Use direct labels, not floating cards.
 - Keep labels outside ribbons and maintain proportional bar/ribbon thickness.
+- Keep every detail ribbon's source interval inside its parent bar. Minimum
+  visible heights may enlarge destination bars, but must not be reused for
+  source-flow accounting or cumulative source cursors.
 - Add a company logo only from an official or user-supplied asset. Text is the
   fallback.
 - Do not reproduce another publisher's logo or imply their authorship. Replace
