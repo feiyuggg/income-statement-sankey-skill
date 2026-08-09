@@ -116,8 +116,89 @@ class RightProfitLayoutTests(unittest.TestCase):
             layout["opex_label_top"] + MODULE.EXPENSE_LABEL_HEIGHT + 20.0,
         )
 
+    def test_moves_fallback_opex_and_short_other_labels_to_side_lane(self) -> None:
+        layout = MODULE._right_profit_layout(
+            net_height=245.9,
+            tax_height=33.7,
+            operating_bottom=615.7,
+            opex_top=590.0,
+            opex_bottom=609.4,
+            other_height=28.9,
+            other_bar_width=55.0,
+            net_is_loss=False,
+            other_inflow=True,
+        )
+
+        self.assertFalse(layout["opex_label_in_gap"])
+        self.assertEqual(layout["opex_label_position"], "left")
+        self.assertEqual(layout["other_label_position"], "left")
+        self.assertGreaterEqual(
+            layout["other_source_top"],
+            layout["opex_label_top"] + MODULE.EXPENSE_LABEL_HEIGHT + 20.0,
+        )
+
+    def test_stacks_negative_other_below_tax_and_before_expense_details(self) -> None:
+        layout = MODULE._right_profit_layout(
+            net_height=217.6,
+            tax_height=38.4,
+            operating_bottom=621.7,
+            opex_top=590.0,
+            opex_bottom=603.4,
+            other_height=0.0,
+            other_bar_width=55.0,
+            net_is_loss=False,
+            other_inflow=False,
+            other_outflow_height=10.0,
+        )
+
+        tax_bottom = layout["tax_top"] + 38.4
+        self.assertGreaterEqual(layout["other_outflow_top"], tax_bottom + 20.0)
+        self.assertGreaterEqual(
+            layout["expense_start"],
+            layout["other_outflow_top"] + MODULE.OTHER_LABEL_HEIGHT + 20.0,
+        )
+
+    def test_keeps_pre_opex_other_above_expense_detail_sources(self) -> None:
+        pre_opex = MODULE._pre_opex_other_layout(
+            operating_bottom=615.7,
+            other_height=28.9,
+            other_inflow=True,
+        )
+        opex_top = MODULE._expense_bar_top(
+            baseline_top=590.0,
+            upper_bottom=pre_opex["label_upper_bottom"],
+        )
+        opex_bottom = opex_top + 19.4
+        layout = MODULE._right_profit_layout(
+            net_height=245.9,
+            tax_height=33.7,
+            operating_bottom=pre_opex["label_upper_bottom"],
+            opex_top=opex_top,
+            opex_bottom=opex_bottom,
+            other_height=28.9,
+            other_bar_width=55.0,
+            net_is_loss=False,
+            other_inflow=True,
+            other_source_top_override=pre_opex["other_source_top"],
+        )
+
+        self.assertTrue(pre_opex["other_above_opex"])
+        self.assertLess(layout["other_source_top"] + 28.9, opex_top)
+        self.assertGreaterEqual(layout["expense_start"], opex_bottom + 24.0)
+
 
 class ExpenseLabelLayoutTests(unittest.TestCase):
+    def test_moves_expense_bar_below_complete_label_gap(self) -> None:
+        top = MODULE._expense_bar_top(
+            baseline_top=590.0,
+            upper_bottom=621.7,
+        )
+
+        self.assertGreaterEqual(
+            top,
+            621.7 + MODULE.EXPENSE_LABEL_HEIGHT + 2.0 * MODULE.LABEL_CLEARANCE,
+        )
+
     def test_centers_label_inside_a_safe_gap(self) -> None:
         layout = MODULE._expense_label_layout(
             upper_bottom=474.0,
@@ -141,6 +222,63 @@ class ExpenseLabelLayoutTests(unittest.TestCase):
 
         self.assertFalse(layout["in_gap"])
         self.assertGreaterEqual(layout["top"], 820.0 + MODULE.LABEL_CLEARANCE)
+
+
+class ExpenseDetailDensityTests(unittest.TestCase):
+    def test_keeps_full_metrics_with_generous_pitch(self) -> None:
+        density = MODULE._expense_detail_density(125.0)
+
+        self.assertTrue(density["show_pct"])
+        self.assertTrue(density["show_pp"])
+        self.assertFalse(density["combine_amount"])
+
+    def test_hides_pp_before_percentage(self) -> None:
+        density = MODULE._expense_detail_density(100.0)
+
+        self.assertTrue(density["show_pct"])
+        self.assertFalse(density["show_pp"])
+        self.assertFalse(density["combine_amount"])
+
+    def test_uses_compact_name_and_amount_for_sndk_pitch(self) -> None:
+        density = MODULE._expense_detail_density(76.0)
+
+        self.assertFalse(density["show_pct"])
+        self.assertFalse(density["show_pp"])
+        self.assertFalse(density["combine_amount"])
+        self.assertLess(density["amount_base_offset"], 48.0)
+        self.assertEqual(density["block_height"], 64.0)
+
+    def test_combines_name_and_amount_for_dense_four_item_layout(self) -> None:
+        density = MODULE._expense_detail_density(45.0)
+
+        self.assertTrue(density["combine_amount"])
+        self.assertFalse(density["show_pct"])
+        self.assertFalse(density["show_pp"])
+
+    def test_uses_remaining_space_to_separate_compact_details(self) -> None:
+        tops = MODULE._expense_detail_tops(
+            start=862.0,
+            bottom=1025.0,
+            count=2,
+            block_height=64.0,
+        )
+
+        self.assertEqual(tops[0], 862.0)
+        self.assertEqual(tops[1], 961.0)
+        self.assertGreaterEqual(tops[1] - tops[0], 64.0)
+
+    def test_dense_four_item_tops_leave_room_for_last_label(self) -> None:
+        tops = MODULE._expense_detail_tops(
+            start=820.0,
+            bottom=1025.0,
+            count=4,
+            block_height=42.0,
+        )
+
+        self.assertEqual(tops[-1], 983.0)
+        self.assertTrue(
+            all(right - left >= 42.0 for left, right in zip(tops, tops[1:]))
+        )
 
 
 if __name__ == "__main__":

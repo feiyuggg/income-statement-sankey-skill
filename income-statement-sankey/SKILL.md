@@ -137,19 +137,28 @@ quarter-specific extraction, and every JSON must validate before deployment.
   label block when the net bar is short.
 - When positive non-operating income is unusually large, place its source bar
   below the operating-expense bar and keep its bottom above the footer when
-  possible. Do not put horizontal text inside a narrow source bar; move the
-  label into adjacent whitespace instead.
+  possible. In high-margin layouts with a short positive Other bar, place it
+  above the operating-expense label and bar so its Tax/Net ribbons do not cross
+  operating-expense detail ribbons. Do not put horizontal text inside a narrow
+  source bar; move the label into adjacent whitespace instead.
 - Put the Operating expenses label in the open gap between operating profit and
   the expense bar only when that gap can contain the complete three-line text
   bounding box plus explicit clearance; otherwise place it below the expense
-  bar and move later source bars below the label block.
+  bar in the left-side label lane and move later source bars below the label
+  block. Do not center fallback text over outgoing profit ribbons.
+- Place short positive Other labels in the left-side label lane rather than
+  below their source bar. Stack negative Other sinks below Tax (or below the
+  complete net-profit label block when Tax is absent), and reserve space before
+  expense-detail sinks begin.
 - Apply the same rendered-height rule to Cost of revenue: center its complete
   three-line label block between gross profit and the cost bar only when the
   gap is safe, otherwise place the label below the cost bar. Do not use fixed Y
   coordinates for either expense label.
-- Left-align long expense-detail labels to the right of their sink bars. Hide
-  optional YoY percentage-point copy when the available per-item pitch is too
-  small to keep adjacent labels separated.
+- Left-align long expense-detail labels to the right of their sink bars and
+  distribute both custom items and the default R&D/SG&A breakdown across the
+  remaining right-column height. As per-item pitch tightens, hide YoY copy,
+  then revenue-share copy, and finally combine the name and amount in dense
+  four-item layouts instead of allowing adjacent labels to overlap.
 - Keep every detail ribbon's source interval inside its parent bar. Minimum
   visible heights may enlarge destination bars, but must not be reused for
   source-flow accounting or cumulative source cursors.
