@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import tempfile
 import unittest
 from pathlib import Path
+
+from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -296,6 +300,156 @@ class ExpenseDetailDensityTests(unittest.TestCase):
         self.assertTrue(
             all(right - left >= 42.0 for left, right in zip(tops, tops[1:]))
         )
+
+
+class SegmentLabelWidthTests(unittest.TestCase):
+    def test_fits_long_segment_name_inside_left_column(self) -> None:
+        MODULE._FONT_DPI = 160
+        fig, ax = MODULE._figure(160)
+        try:
+            artist = ax.text(
+                255.0,
+                400.0,
+                "High Performance\nComputing (HPC)",
+                ha="right",
+                va="center",
+                linespacing=0.95,
+                **MODULE._font(22, "bold"),
+            )
+
+            MODULE._fit_text_width(
+                fig,
+                artist,
+                left=24.0,
+                right=255.0,
+            )
+            extent = artist.get_window_extent(fig.canvas.get_renderer())
+
+            self.assertGreaterEqual(extent.x0, 23.5)
+            self.assertLessEqual(extent.x1, 255.5)
+        finally:
+            MODULE.plt.close(fig)
+
+
+class SegmentMetricLayoutTests(unittest.TestCase):
+    def test_keeps_top_segment_metrics_above_clear_label_block(self) -> None:
+        layout = MODULE._segment_metric_layout(
+            segment_top=235.0,
+            segment_bottom=445.0,
+            label_left=24.0,
+            label_top=307.0,
+            label_right=255.0,
+            label_bottom=410.0,
+            metric_left=276.0,
+            metric_right=358.0,
+        )
+
+        self.assertEqual(layout["position"], "above")
+        self.assertLessEqual(layout["bottom"], 307.0 - MODULE.LABEL_CLEARANCE)
+
+    def test_keeps_bottom_metrics_above_when_columns_do_not_intersect(self) -> None:
+        layout = MODULE._segment_metric_layout(
+            segment_top=821.0,
+            segment_bottom=859.0,
+            label_left=24.0,
+            label_top=810.0,
+            label_right=255.0,
+            label_bottom=910.0,
+            metric_left=276.0,
+            metric_right=358.0,
+        )
+
+        self.assertEqual(layout["position"], "above")
+        self.assertLessEqual(layout["bottom"], 821.0)
+
+    def test_moves_metrics_below_when_two_dimensional_bounds_overlap(self) -> None:
+        layout = MODULE._segment_metric_layout(
+            segment_top=821.0,
+            segment_bottom=859.0,
+            label_left=24.0,
+            label_top=760.0,
+            label_right=300.0,
+            label_bottom=910.0,
+            metric_left=276.0,
+            metric_right=358.0,
+        )
+
+        self.assertEqual(layout["position"], "below")
+        self.assertGreaterEqual(layout["top"], 910.0 + MODULE.LABEL_CLEARANCE)
+        self.assertLessEqual(layout["bottom"], 1025.0)
+
+
+class SegmentRenderRegressionTests(unittest.TestCase):
+    def test_long_three_segment_labels_do_not_touch_canvas_edge(self) -> None:
+        sample_path = (
+            ROOT
+            / "income-statement-sankey/scripts/examples/aapl_q3_fy26_full.json"
+        )
+        data = json.loads(sample_path.read_text())
+        data["company"] = "TSMC"
+        data["ticker"] = "TSM"
+        data["segments"] = [
+            {
+                "name": "High Performance Computing (HPC)",
+                "subtitle": "AI accelerators, GPUs, data center CPUs, networking",
+                "revenue": 26.532,
+                "yoy_pct": 36.0,
+                "group": "hpc_smartphone",
+            },
+            {
+                "name": "Smartphone",
+                "subtitle": "Mobile SoCs, baseband, image processors",
+                "revenue": 8.844,
+                "yoy_pct": 36.0,
+                "group": "hpc_smartphone",
+            },
+            {
+                "name": "IoT / Automotive / DCE / Others",
+                "subtitle": (
+                    "Internet of Things, Automotive, Digital Consumer Electronics"
+                ),
+                "revenue": 4.824,
+                "yoy_pct": 36.0,
+                "group": "iot_etc",
+            },
+        ]
+        data["revenue_groups"] = [
+            {
+                "id": "hpc_smartphone",
+                "name": "HPC & Smartphone",
+                "revenue": 35.376,
+                "yoy_pct": 36.0,
+            },
+            {
+                "id": "iot_etc",
+                "name": "IoT, Auto, DCE, Others",
+                "revenue": 4.824,
+                "yoy_pct": 36.0,
+            },
+        ]
+        data["total_revenue"] = {"revenue": 40.2, "yoy_pct": 36.0}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output = Path(tmp_dir) / "tsm.png"
+            MODULE.render(data, output, dpi=160)
+            image = Image.open(output).convert("RGB")
+
+            for band_top, band_bottom in ((285, 430), (555, 665), (785, 1000)):
+                dark_edge_pixels = 0
+                for y in range(band_top, band_bottom):
+                    for x in range(0, 8):
+                        if max(image.getpixel((x, y))) < 125:
+                            dark_edge_pixels += 1
+                self.assertEqual(dark_edge_pixels, 0)
+
+            for band_top, band_bottom in ((145, 220), (465, 540), (740, 805)):
+                xs = []
+                for y in range(band_top, band_bottom):
+                    for x in range(265, 370):
+                        if max(image.getpixel((x, y))) < 125:
+                            xs.append(x)
+                self.assertTrue(xs)
+                self.assertAlmostEqual((min(xs) + max(xs)) / 2, 317.0, delta=8.0)
 
 
 if __name__ == "__main__":

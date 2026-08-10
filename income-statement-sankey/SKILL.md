@@ -100,6 +100,10 @@ quarter-specific extraction, and every JSON must validate before deployment.
 ## Data rules
 
 - Do not invent segments, totals, YoY, margin changes, logos, or fiscal labels.
+- Standard-layout companies may report an operating loss. Preserve the negative
+  `operating_profit.amount`; the validator accepts it when the income-statement
+  identities reconcile. Do not replace a reported operating loss with zero or a
+  positive proxy merely to satisfy rendering.
 - Calculate and display revenue shares from unrounded source values.
 - Reconcile all required identities within the tight tolerance accepted by
   `validate_data.py`; do not validate rounded display-only inputs.
@@ -127,6 +131,10 @@ quarter-specific extraction, and every JSON must validate before deployment.
 - Preserve the reference flow: segments -> revenue group -> total revenue ->
   gross profit/cost of revenue -> operating profit/operating expenses -> net
   profit/tax/other/R&D/SG&A.
+- Keep official segment names intact. The renderer constrains long left-column
+  labels to the available pixel width, centers amount/YoY blocks on their source
+  bars, and moves those blocks only when complete two-dimensional bounds collide.
+  Do not manually shorten names merely to hide clipping or overlap.
 - Use black revenue bars, gray revenue ribbons, green profit ribbons, and red
   cost ribbons on a light-gray background.
 - Use direct labels, not floating cards.

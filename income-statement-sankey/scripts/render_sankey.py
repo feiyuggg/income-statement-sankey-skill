@@ -42,6 +42,18 @@ RED_BAR = "#E00000"
 RED_FLOW = "#E9958D"
 SOURCE = "#15577A"
 _FONT_DPI = 100
+FONT_FAMILIES = [
+    "Helvetica Neue",
+    "Helvetica",
+    "Arial Unicode MS",
+    "DejaVu Sans",
+]
+
+
+def _operating_presentation(value: float) -> tuple[str, str, str]:
+    if value < 0:
+        return "Operating loss", RED, RED_FLOW
+    return "Operating profit", GREEN, GREEN_FLOW
 
 
 def _money(value: float | None, unit: str, expense: bool = False) -> str:
@@ -308,7 +320,7 @@ def _right_profit_layout(
 ) -> dict[str, float | bool | str]:
     if net_is_loss:
         net_top = 280.0
-        tax_top = net_top + net_height + 20.0
+        tax_top = max(net_top + net_height + 20.0, net_top + 170.0)
     else:
         net_top = 310.0
         if tax_height > 0:
@@ -386,7 +398,121 @@ def _font(size: float, weight: str = "normal") -> dict[str, Any]:
     return {
         "fontsize": size * 100 / _FONT_DPI,
         "fontweight": weight,
-        "fontfamily": "sans-serif",
+        "fontfamily": FONT_FAMILIES,
+    }
+
+
+def _fit_text_width(
+    fig,
+    artist,
+    *,
+    left: float,
+    right: float,
+) -> None:
+    ax = artist.axes
+    left_px = ax.transData.transform((left, 0.0))[0]
+    right_px = ax.transData.transform((right, 0.0))[0]
+    available = max(right_px - left_px, 1.0)
+    renderer = fig.canvas.get_renderer()
+    for _ in range(2):
+        extent = artist.get_window_extent(renderer)
+        if extent.width <= available and extent.x0 >= left_px - 0.5:
+            return
+        if extent.width <= 0:
+            return
+        artist.set_fontsize(artist.get_fontsize() * available / extent.width * 0.985)
+
+
+def _artist_data_bounds(fig, artists: list[Any]) -> tuple[float, float, float, float]:
+    renderer = fig.canvas.get_renderer()
+    data_points: list[tuple[float, float]] = []
+    for artist in artists:
+        extent = artist.get_window_extent(renderer)
+        inverse = artist.axes.transData.inverted()
+        corners = inverse.transform(
+            [
+                (extent.x0, extent.y0),
+                (extent.x0, extent.y1),
+                (extent.x1, extent.y0),
+                (extent.x1, extent.y1),
+            ]
+        )
+        data_points.extend((float(x), float(y)) for x, y in corners)
+    xs = [point[0] for point in data_points]
+    ys = [point[1] for point in data_points]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _segment_metric_layout(
+    *,
+    segment_top: float,
+    segment_bottom: float,
+    label_left: float,
+    label_top: float,
+    label_right: float,
+    label_bottom: float,
+    metric_left: float,
+    metric_right: float,
+    has_yoy: bool = True,
+    band_top: float = 145.0,
+    band_bottom: float = 1025.0,
+) -> dict[str, float | str | bool]:
+    amount_half_height = 16.0
+    yoy_half_height = 13.0
+    line_gap = 34.0
+
+    amount_y = segment_top - 64.0
+    yoy_y = amount_y + line_gap
+    top = amount_y - amount_half_height
+    bottom = yoy_y + yoy_half_height if has_yoy else amount_y + amount_half_height
+    horizontal_overlap = not (
+        metric_right + LABEL_CLEARANCE <= label_left
+        or metric_left >= label_right + LABEL_CLEARANCE
+    )
+    vertical_overlap = not (
+        bottom + LABEL_CLEARANCE <= label_top
+        or top >= label_bottom + LABEL_CLEARANCE
+    )
+    if top >= band_top and not (horizontal_overlap and vertical_overlap):
+        return {
+            "position": "above",
+            "amount_y": amount_y,
+            "yoy_y": yoy_y,
+            "top": top,
+            "bottom": bottom,
+            "combine": False,
+        }
+
+    amount_y = segment_bottom + 30.0
+    if horizontal_overlap:
+        amount_y = max(
+            amount_y,
+            label_bottom + LABEL_CLEARANCE + amount_half_height,
+        )
+    yoy_y = amount_y + line_gap
+    top = amount_y - amount_half_height
+    bottom = yoy_y + yoy_half_height if has_yoy else amount_y + amount_half_height
+    if bottom <= band_bottom:
+        return {
+            "position": "below",
+            "amount_y": amount_y,
+            "yoy_y": yoy_y,
+            "top": top,
+            "bottom": bottom,
+            "combine": False,
+        }
+
+    metric_y = min(
+        max(segment_bottom + 20.0, label_bottom + LABEL_CLEARANCE + 13.0),
+        band_bottom - 13.0,
+    )
+    return {
+        "position": "compact",
+        "amount_y": metric_y,
+        "yoy_y": metric_y,
+        "top": metric_y - 13.0,
+        "bottom": metric_y + 13.0,
+        "combine": True,
     }
 
 
@@ -499,12 +625,7 @@ def _source_label(data: dict[str, Any]) -> str:
 
 def _figure(dpi: int):
     """Create the standard 2000x1122 canvas with an inverted-y pixel axis."""
-    plt.rcParams["font.sans-serif"] = [
-        "Helvetica Neue",
-        "Helvetica",
-        "Arial",
-        "DejaVu Sans",
-    ]
+    plt.rcParams["font.sans-serif"] = FONT_FAMILIES
     plt.rcParams["axes.unicode_minus"] = False
     fig = plt.figure(figsize=(WIDTH / dpi, HEIGHT / dpi), dpi=dpi, facecolor=BG)
     ax = fig.add_axes((0, 0, 1, 1))
@@ -721,13 +842,12 @@ def _render_conglomerate(data: dict[str, Any], out_path: Path, dpi: int = 100) -
             **_font(19, "bold"),
         )
         left_limit = 172.0 if icon_drawn else 26.0
-        name_extent = name_text.get_window_extent(fig.canvas.get_renderer())
-        if name_extent.x0 < left_limit and name_extent.width > 0:
-            name_text.set_fontsize(
-                name_text.get_fontsize()
-                * (x_segment - 42 - left_limit)
-                / name_extent.width
-            )
+        _fit_text_width(
+            fig,
+            name_text,
+            left=left_limit,
+            right=x_segment - 42,
+        )
         detail = _money(value, unit)
         yoy_text = _yoy(segment.get("yoy_pct"))
         if yoy_text:
@@ -1089,12 +1209,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
     rd_value = float(opex.get("rd") or 0)
     sga_value = float(opex.get("sga") or 0)
 
-    plt.rcParams["font.sans-serif"] = [
-        "Helvetica Neue",
-        "Helvetica",
-        "Arial",
-        "DejaVu Sans",
-    ]
+    plt.rcParams["font.sans-serif"] = FONT_FAMILIES
     plt.rcParams["axes.unicode_minus"] = False
 
     fig = plt.figure(figsize=(WIDTH / dpi, HEIGHT / dpi), dpi=dpi, facecolor=BG)
@@ -1400,7 +1515,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
                     if len(segment_name) > 20
                     else segment_name
                 )
-                ax.text(
+                name_artist = ax.text(
                     label_x,
                     center,
                     wrapped_name,
@@ -1410,11 +1525,18 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
                     linespacing=0.95,
                     **_font(22 if len(segments) <= 4 else 19, "bold"),
                 )
+                _fit_text_width(
+                    fig,
+                    name_artist,
+                    left=24.0,
+                    right=label_x,
+                )
+                label_artists = [name_artist]
                 subtitle = str(segment.get("subtitle") or "")
                 if subtitle:
                     long_subtitle = len(subtitle) > 22
-                    ax.text(
-                        160 if long_subtitle else label_x,
+                    subtitle_artist = ax.text(
+                        139.5 if long_subtitle else label_x,
                         center + 22,
                         textwrap.fill(subtitle, width=22),
                         ha="center" if long_subtitle else ha,
@@ -1423,8 +1545,15 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
                         linespacing=0.95,
                         **_font(11 if long_subtitle else 12),
                     )
+                    _fit_text_width(
+                        fig,
+                        subtitle_artist,
+                        left=24.0,
+                        right=255.0,
+                    )
+                    label_artists.append(subtitle_artist)
             else:
-                ax.text(
+                name_artist = ax.text(
                     155,
                     center,
                     str(segment.get("name") or ""),
@@ -1433,25 +1562,78 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
                     color=DARK,
                     **_font(22, "bold"),
                 )
-            amount_y = segment_top - (36 if index == len(segments) - 1 else 64)
-            ax.text(
-                x_segment - 20,
-                amount_y,
+                _fit_text_width(
+                    fig,
+                    name_artist,
+                    left=155.0,
+                    right=x_segment - 12.0,
+                )
+                label_artists = [name_artist]
+
+            label_left, label_top, label_right, label_bottom = _artist_data_bounds(
+                fig, label_artists
+            )
+            yoy_text = _yoy(segment.get("yoy_pct"))
+            metric_x = x_segment + segment_width / 2
+            amount_artist = ax.text(
+                metric_x,
+                0.0,
                 _money(value, unit),
-                ha="right",
+                ha="center",
                 va="center",
                 color=DARK,
                 **_font(19),
             )
-            ax.text(
-                x_segment - 20,
-                amount_y + 34,
-                _yoy(segment.get("yoy_pct")),
-                ha="right",
-                va="center",
-                color=MUTED,
-                **_font(14),
+            metric_artists = [amount_artist]
+            yoy_artist = None
+            if yoy_text:
+                yoy_artist = ax.text(
+                    metric_x,
+                    0.0,
+                    yoy_text,
+                    ha="center",
+                    va="center",
+                    color=MUTED,
+                    **_font(14),
+                )
+                metric_artists.append(yoy_artist)
+            metric_left, _, metric_right, _ = _artist_data_bounds(
+                fig, metric_artists
             )
+            metric_layout = _segment_metric_layout(
+                segment_top=segment_top,
+                segment_bottom=segment_bottom,
+                label_left=label_left,
+                label_top=label_top,
+                label_right=label_right,
+                label_bottom=label_bottom,
+                metric_left=metric_left,
+                metric_right=metric_right,
+                has_yoy=bool(yoy_text),
+            )
+            if metric_layout["combine"]:
+                for metric_artist in metric_artists:
+                    metric_artist.remove()
+                detail = _money(value, unit)
+                if yoy_text:
+                    detail = f"{detail}   {yoy_text}"
+                ax.text(
+                    metric_x,
+                    float(metric_layout["amount_y"]),
+                    detail,
+                    ha="center",
+                    va="center",
+                    color=MUTED,
+                    **_font(14),
+                )
+            else:
+                amount_artist.set_position(
+                    (metric_x, float(metric_layout["amount_y"]))
+                )
+                if yoy_artist is not None:
+                    yoy_artist.set_position(
+                        (metric_x, float(metric_layout["yoy_y"]))
+                    )
 
     gross_height = height(gross_value)
     cogs_height = height(cogs_value)
@@ -1503,6 +1685,9 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
 
     operating_height = height(operating_value)
     opex_height = height(opex_value)
+    operating_label, operating_color, operating_flow = _operating_presentation(
+        operating_value
+    )
     operating_top = 365.0
     operating_bottom = operating_top + operating_height
     other_inflow = other_value > 0.05
@@ -1526,7 +1711,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         x_operating,
         operating_top,
         operating_bottom,
-        GREEN_FLOW,
+        operating_flow,
     )
     _ribbon(
         ax,
@@ -1538,11 +1723,18 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         opex_bottom,
         RED_FLOW,
     )
-    _bar(ax, x_operating, operating_top, operating_width, operating_height, GREEN_BAR)
+    _bar(
+        ax,
+        x_operating,
+        operating_top,
+        operating_width,
+        operating_height,
+        RED_BAR if operating_value < 0 else GREEN_BAR,
+    )
     _bar(ax, x_operating, opex_top, operating_width, opex_height, RED_BAR)
 
-    ax.text(1438, 236, "Operating profit", ha="center", color=GREEN, **_font(23, "bold"))
-    ax.text(1438, 277, _money(operating_value, unit), ha="center", color=GREEN, **_font(21))
+    ax.text(1438, 236, operating_label, ha="center", color=operating_color, **_font(23, "bold"))
+    ax.text(1438, 277, _money(operating_value, unit), ha="center", color=operating_color, **_font(21))
     ax.text(
         1438,
         313,
@@ -1777,7 +1969,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
             )
         loss_flow_x = (x_other + other_width + x_final) / 2
         loss_flow_y = net_top + net_height / 2
-        if net_height >= 90:
+        if net_height >= 90 and operating_height >= 90:
             ax.text(
                 loss_flow_x,
                 loss_flow_y - 28,
@@ -1799,17 +1991,17 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         else:
             ax.text(
                 x_other + other_width / 2,
-                other_top - 48,
+                other_top - 18,
                 "Other expense",
                 ha="center",
                 color=RED,
                 **_font(15, "bold"),
             )
             ax.text(
-                x_other + other_width / 2,
-                other_top - 18,
+                x_other + other_width + 12,
+                other_top + other_height / 2,
                 _money(other_value, unit, expense=True),
-                ha="center",
+                ha="left",
                 color=RED,
                 **_font(14),
             )

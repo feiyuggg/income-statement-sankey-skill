@@ -420,9 +420,16 @@ def validate(data: dict[str, Any], tolerance: float | None = None) -> list[str]:
         revenue,
     )
 
-    operating_profit = _require_number(
-        errors, data, "operating_profit", "amount", positive=True
-    )
+    operating_profit = _require_number(errors, data, "operating_profit", "amount")
+    if (
+        operating_profit is not None
+        and gross_profit is not None
+        and operating_profit < -gross_profit
+    ):
+        errors.append(
+            "operating_profit.amount must be greater than or equal to "
+            "-gross_profit.amount"
+        )
     opex = _require_number(errors, data, "opex", "amount", positive=True)
     identity(
         "operating profit + operating expenses -> gross profit",
