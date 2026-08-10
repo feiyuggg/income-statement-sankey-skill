@@ -104,6 +104,11 @@ quarter-specific extraction, and every JSON must validate before deployment.
   `operating_profit.amount`; the validator accepts it when the income-statement
   identities reconcile. Do not replace a reported operating loss with zero or a
   positive proxy merely to satisfy rendering.
+- Reconcile the sign pattern before rendering a net loss. Positive operating
+  profit may offset a larger non-operating expense, but a reported operating
+  loss must remain a red loss source. When operating loss, other expense, and
+  tax reconcile to net loss, route them as vertically ordered red inflows into
+  the net-loss bucket; never emit a green ribbon from a negative operating bar.
 - Calculate and display revenue shares from unrounded source values.
 - Reconcile all required identities within the tight tolerance accepted by
   `validate_data.py`; do not validate rounded display-only inputs.

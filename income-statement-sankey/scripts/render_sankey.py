@@ -1860,6 +1860,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
 
     net_height = height(net_value)
     net_is_loss = net_value < 0
+    aggregate_operating_loss = net_is_loss and operating_value < 0
     tax_height = height(tax_value, 11) if tax_value > 0 else 0.0
     tax_accounting_height = height(tax_value) if tax_value > 0 else 0.0
     other_outflow_height = (
@@ -1919,7 +1920,103 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         **_font(18),
     )
 
-    if net_is_loss:
+    if aggregate_operating_loss:
+        x_other = x_source + (x_final - x_source) * 0.36
+        other_width = 48.0
+        other_loss_height = (
+            height(abs(other_value), 10) if other_value < -0.05 else 0.0
+        )
+        other_top = net_top
+        tax_source_top = tax_top
+        loss_sources = []
+        if other_loss_height > 0:
+            loss_sources.append(
+                (
+                    "other",
+                    x_other + other_width,
+                    other_top,
+                    other_top + other_loss_height,
+                    height(abs(other_value)),
+                )
+            )
+        loss_sources.append(
+            (
+                "operating",
+                x_source,
+                operating_top,
+                operating_bottom,
+                height(abs(operating_value)),
+            )
+        )
+        if tax_height > 0:
+            loss_sources.append(
+                (
+                    "tax",
+                    x_other + other_width,
+                    tax_source_top,
+                    tax_source_top + tax_height,
+                    tax_accounting_height,
+                )
+            )
+
+        ordered_sources = sorted(
+            loss_sources,
+            key=lambda source: (source[2] + source[3]) / 2,
+        )
+        destination_spans = _bounded_stacked_spans(
+            net_top,
+            net_bottom,
+            [source[4] for source in ordered_sources],
+        )
+        for source, destination_span in zip(ordered_sources, destination_spans):
+            _ribbon(
+                ax,
+                source[1],
+                source[2],
+                source[3],
+                x_final,
+                destination_span[0],
+                destination_span[1],
+                RED_FLOW,
+            )
+
+        if other_loss_height > 0:
+            _bar(ax, x_other, other_top, other_width, other_loss_height, RED_BAR)
+            ax.text(
+                x_other + other_width / 2,
+                other_top - 18,
+                "Other expense",
+                ha="center",
+                color=RED,
+                **_font(15, "bold"),
+            )
+            ax.text(
+                x_other + other_width / 2,
+                other_top + other_loss_height + 24,
+                _money(other_value, unit, expense=True),
+                ha="center",
+                color=RED,
+                **_font(14),
+            )
+        if tax_height > 0:
+            _bar(ax, x_other, tax_source_top, other_width, tax_height, RED_BAR)
+            ax.text(
+                x_other + other_width / 2,
+                tax_source_top - 18,
+                "Tax",
+                ha="center",
+                color=RED,
+                **_font(15, "bold"),
+            )
+            ax.text(
+                x_other + other_width / 2,
+                tax_source_top + tax_height + 24,
+                _money(tax_value, unit, True),
+                ha="center",
+                color=RED,
+                **_font(14),
+            )
+    elif net_is_loss:
         other_height = height(abs(other_value), 10)
         other_top = net_top
         x_other = x_source + (x_final - x_source) * 0.36
@@ -2199,7 +2296,7 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         **_font(14),
     )
 
-    if tax_height > 0:
+    if tax_height > 0 and not aggregate_operating_loss:
         _bar(ax, x_final, tax_top, final_width, tax_height, RED_BAR)
         ax.text(
             1816,

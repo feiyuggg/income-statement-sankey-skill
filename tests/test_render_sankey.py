@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from PIL import Image
 
@@ -47,6 +48,74 @@ class DestinationOrderedFlowSpansTests(unittest.TestCase):
         self.assertEqual(spans["net"], (100.0, 150.0))
         self.assertEqual(spans["tax"], (150.0, 170.0))
         self.assertEqual(spans["other"], (170.0, 180.0))
+
+
+class NetLossFlowRegressionTests(unittest.TestCase):
+    @staticmethod
+    def _rendered_right_side_ribbons(data: dict) -> list[tuple]:
+        ribbons: list[tuple] = []
+        original_ribbon = MODULE._ribbon
+
+        def capture_ribbon(*args, **kwargs):
+            ribbons.append(args[1:8])
+            return original_ribbon(*args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output = Path(tmp_dir) / "net-loss.png"
+            with mock.patch.object(MODULE, "_ribbon", side_effect=capture_ribbon):
+                MODULE.render(data, output)
+
+        return [ribbon for ribbon in ribbons if ribbon[0] >= 1400.0]
+
+    def test_positive_operating_profit_can_offset_other_expense(self) -> None:
+        sample_path = (
+            ROOT
+            / "income-statement-sankey/scripts/examples/intc_q2_2026_net_loss.json"
+        )
+        data = json.loads(sample_path.read_text())
+
+        ribbons = self._rendered_right_side_ribbons(data)
+
+        self.assertTrue(any(ribbon[6] == MODULE.GREEN_FLOW for ribbon in ribbons))
+
+    def test_operating_loss_never_emits_green_profit_flow(self) -> None:
+        sample_path = (
+            ROOT
+            / "income-statement-sankey/scripts/examples/intc_q2_2026_net_loss.json"
+        )
+        data = json.loads(sample_path.read_text())
+        data["company"] = "Space Exploration Technologies Corp."
+        data["ticker"] = "SPCX"
+        data["period_label"] = "Q2 2026"
+        data["period_end"] = "2026-06-30"
+        data["operating_profit"] = {
+            "amount": -0.143,
+            "margin_pct": -1.83,
+            "margin_yoy_pp": 21.997,
+        }
+        data["other_income"] = -0.375
+        data["tax"] = 0.023
+        data["net_profit"] = {
+            "amount": -0.541,
+            "margin_pct": -6.9235,
+            "margin_yoy_pp": 17.837,
+        }
+
+        ribbons = self._rendered_right_side_ribbons(data)
+        net_loss_ribbons = [
+            ribbon
+            for ribbon in ribbons
+            if ribbon[3] == 1692.0 and 279.0 <= ribbon[4] < ribbon[5] <= 330.0
+        ]
+
+        self.assertEqual(len(net_loss_ribbons), 3)
+        self.assertTrue(
+            all(ribbon[6] == MODULE.RED_FLOW for ribbon in net_loss_ribbons)
+        )
+        self.assertEqual(
+            sorted((ribbon[4], ribbon[5]) for ribbon in net_loss_ribbons),
+            [(ribbon[4], ribbon[5]) for ribbon in net_loss_ribbons],
+        )
 
 
 class RightProfitLayoutTests(unittest.TestCase):
