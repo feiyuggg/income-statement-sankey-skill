@@ -443,76 +443,49 @@ def _artist_data_bounds(fig, artists: list[Any]) -> tuple[float, float, float, f
     return min(xs), min(ys), max(xs), max(ys)
 
 
-def _segment_metric_layout(
+def _segment_label_block_layout(
     *,
-    segment_top: float,
-    segment_bottom: float,
-    label_left: float,
-    label_top: float,
-    label_right: float,
-    label_bottom: float,
-    metric_left: float,
-    metric_right: float,
+    center: float,
+    name_lines: int,
+    subtitle_lines: int = 0,
     has_yoy: bool = True,
-    band_top: float = 145.0,
-    band_bottom: float = 1025.0,
-) -> dict[str, float | str | bool]:
-    amount_half_height = 16.0
-    yoy_half_height = 13.0
-    line_gap = 34.0
+    band_top: float = 275.0,
+    band_bottom: float = 1015.0,
+) -> dict[str, float | None]:
+    """Keep a segment's name and metrics together in one left-side block."""
+    name_height = max(name_lines, 1) * 23.0
+    subtitle_height = max(subtitle_lines, 0) * 15.0
+    block_height = name_height + 9.0 + 23.0
+    if subtitle_height:
+        block_height += 5.0 + subtitle_height
+    if has_yoy:
+        block_height += 6.0 + 18.0
 
-    amount_y = segment_top - 64.0
-    yoy_y = amount_y + line_gap
-    top = amount_y - amount_half_height
-    bottom = yoy_y + yoy_half_height if has_yoy else amount_y + amount_half_height
-    horizontal_overlap = not (
-        metric_right + LABEL_CLEARANCE <= label_left
-        or metric_left >= label_right + LABEL_CLEARANCE
-    )
-    vertical_overlap = not (
-        bottom + LABEL_CLEARANCE <= label_top
-        or top >= label_bottom + LABEL_CLEARANCE
-    )
-    if top >= band_top and not (horizontal_overlap and vertical_overlap):
-        return {
-            "position": "above",
-            "amount_y": amount_y,
-            "yoy_y": yoy_y,
-            "top": top,
-            "bottom": bottom,
-            "combine": False,
-        }
+    top = min(max(center - block_height / 2.0, band_top), band_bottom - block_height)
+    cursor = top
+    name_y = cursor
+    cursor += name_height
+    subtitle_y = None
+    if subtitle_height:
+        cursor += 5.0
+        subtitle_y = cursor
+        cursor += subtitle_height
+    cursor += 9.0
+    amount_y = cursor + 11.5
+    cursor += 23.0
+    yoy_y = None
+    if has_yoy:
+        cursor += 6.0
+        yoy_y = cursor + 9.0
+        cursor += 18.0
 
-    amount_y = segment_bottom + 30.0
-    if horizontal_overlap:
-        amount_y = max(
-            amount_y,
-            label_bottom + LABEL_CLEARANCE + amount_half_height,
-        )
-    yoy_y = amount_y + line_gap
-    top = amount_y - amount_half_height
-    bottom = yoy_y + yoy_half_height if has_yoy else amount_y + amount_half_height
-    if bottom <= band_bottom:
-        return {
-            "position": "below",
-            "amount_y": amount_y,
-            "yoy_y": yoy_y,
-            "top": top,
-            "bottom": bottom,
-            "combine": False,
-        }
-
-    metric_y = min(
-        max(segment_bottom + 20.0, label_bottom + LABEL_CLEARANCE + 13.0),
-        band_bottom - 13.0,
-    )
     return {
-        "position": "compact",
-        "amount_y": metric_y,
-        "yoy_y": metric_y,
-        "top": metric_y - 13.0,
-        "bottom": metric_y + 13.0,
-        "combine": True,
+        "top": top,
+        "bottom": cursor,
+        "name_y": name_y,
+        "subtitle_y": subtitle_y,
+        "amount_y": amount_y,
+        "yoy_y": yoy_y,
     }
 
 
@@ -1506,134 +1479,76 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
                     **_font(14),
                 )
                 continue
-            label_x = 255
-            ha = "right"
-            if not icon_drawn:
-                segment_name = str(segment.get("name") or "")
-                wrapped_name = (
-                    textwrap.fill(segment_name, width=18)
-                    if len(segment_name) > 20
-                    else segment_name
-                )
-                name_artist = ax.text(
-                    label_x,
-                    center,
-                    wrapped_name,
-                    ha=ha,
-                    va="center",
-                    color=DARK,
-                    linespacing=0.95,
-                    **_font(22 if len(segments) <= 4 else 19, "bold"),
-                )
-                _fit_text_width(
-                    fig,
-                    name_artist,
-                    left=24.0,
-                    right=label_x,
-                )
-                label_artists = [name_artist]
-                subtitle = str(segment.get("subtitle") or "")
-                if subtitle:
-                    long_subtitle = len(subtitle) > 22
-                    subtitle_artist = ax.text(
-                        139.5 if long_subtitle else label_x,
-                        center + 22,
-                        textwrap.fill(subtitle, width=22),
-                        ha="center" if long_subtitle else ha,
-                        va="top",
-                        color=MUTED,
-                        linespacing=0.95,
-                        **_font(11 if long_subtitle else 12),
-                    )
-                    _fit_text_width(
-                        fig,
-                        subtitle_artist,
-                        left=24.0,
-                        right=255.0,
-                    )
-                    label_artists.append(subtitle_artist)
-            else:
-                name_artist = ax.text(
-                    155,
-                    center,
-                    str(segment.get("name") or ""),
-                    ha="left",
-                    va="center",
-                    color=DARK,
-                    **_font(22, "bold"),
-                )
-                _fit_text_width(
-                    fig,
-                    name_artist,
-                    left=155.0,
-                    right=x_segment - 12.0,
-                )
-                label_artists = [name_artist]
-
-            label_left, label_top, label_right, label_bottom = _artist_data_bounds(
-                fig, label_artists
+            segment_name = str(segment.get("name") or "")
+            wrapped_name = (
+                textwrap.fill(segment_name, width=18)
+                if len(segment_name) > 20
+                else segment_name
             )
+            subtitle = str(segment.get("subtitle") or "")
+            wrapped_subtitle = textwrap.fill(subtitle, width=22) if subtitle else ""
             yoy_text = _yoy(segment.get("yoy_pct"))
-            metric_x = x_segment + segment_width / 2
-            amount_artist = ax.text(
-                metric_x,
-                0.0,
+            block_layout = _segment_label_block_layout(
+                center=center,
+                name_lines=wrapped_name.count("\n") + 1,
+                subtitle_lines=(wrapped_subtitle.count("\n") + 1 if subtitle else 0),
+                has_yoy=bool(yoy_text),
+            )
+
+            label_x = 155 if icon_drawn else 255
+            ha = "left" if icon_drawn else "right"
+            name_artist = ax.text(
+                label_x,
+                float(block_layout["name_y"]),
+                wrapped_name,
+                ha=ha,
+                va="top",
+                color=DARK,
+                linespacing=0.95,
+                **_font(22 if len(segments) <= 4 else 19, "bold"),
+            )
+            _fit_text_width(
+                fig,
+                name_artist,
+                left=155.0 if icon_drawn else 24.0,
+                right=x_segment - 12.0 if icon_drawn else label_x,
+            )
+            if subtitle:
+                subtitle_artist = ax.text(
+                    label_x,
+                    float(block_layout["subtitle_y"]),
+                    wrapped_subtitle,
+                    ha=ha,
+                    va="top",
+                    color=MUTED,
+                    linespacing=0.95,
+                    **_font(11 if len(subtitle) > 22 else 12),
+                )
+                _fit_text_width(
+                    fig,
+                    subtitle_artist,
+                    left=155.0 if icon_drawn else 24.0,
+                    right=x_segment - 12.0 if icon_drawn else label_x,
+                )
+            ax.text(
+                label_x,
+                float(block_layout["amount_y"]),
                 _money(value, unit),
-                ha="center",
+                ha=ha,
                 va="center",
                 color=DARK,
                 **_font(19),
             )
-            metric_artists = [amount_artist]
-            yoy_artist = None
             if yoy_text:
-                yoy_artist = ax.text(
-                    metric_x,
-                    0.0,
-                    yoy_text,
-                    ha="center",
-                    va="center",
-                    color=MUTED,
-                    **_font(14),
-                )
-                metric_artists.append(yoy_artist)
-            metric_left, _, metric_right, _ = _artist_data_bounds(
-                fig, metric_artists
-            )
-            metric_layout = _segment_metric_layout(
-                segment_top=segment_top,
-                segment_bottom=segment_bottom,
-                label_left=label_left,
-                label_top=label_top,
-                label_right=label_right,
-                label_bottom=label_bottom,
-                metric_left=metric_left,
-                metric_right=metric_right,
-                has_yoy=bool(yoy_text),
-            )
-            if metric_layout["combine"]:
-                for metric_artist in metric_artists:
-                    metric_artist.remove()
-                detail = _money(value, unit)
-                if yoy_text:
-                    detail = f"{detail}   {yoy_text}"
                 ax.text(
-                    metric_x,
-                    float(metric_layout["amount_y"]),
-                    detail,
-                    ha="center",
+                    label_x,
+                    float(block_layout["yoy_y"]),
+                    yoy_text,
+                    ha=ha,
                     va="center",
                     color=MUTED,
                     **_font(14),
                 )
-            else:
-                amount_artist.set_position(
-                    (metric_x, float(metric_layout["amount_y"]))
-                )
-                if yoy_artist is not None:
-                    yoy_artist.set_position(
-                        (metric_x, float(metric_layout["yoy_y"]))
-                    )
 
     gross_height = height(gross_value)
     cogs_height = height(cogs_value)

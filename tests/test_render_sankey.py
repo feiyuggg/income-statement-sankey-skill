@@ -400,55 +400,141 @@ class SegmentLabelWidthTests(unittest.TestCase):
             MODULE.plt.close(fig)
 
 
-class SegmentMetricLayoutTests(unittest.TestCase):
-    def test_keeps_top_segment_metrics_above_clear_label_block(self) -> None:
-        layout = MODULE._segment_metric_layout(
-            segment_top=235.0,
-            segment_bottom=445.0,
-            label_left=24.0,
-            label_top=307.0,
-            label_right=255.0,
-            label_bottom=410.0,
-            metric_left=276.0,
-            metric_right=358.0,
+class SegmentLabelBlockLayoutTests(unittest.TestCase):
+    def test_centers_single_line_name_and_metrics_as_one_block(self) -> None:
+        layout = MODULE._segment_label_block_layout(
+            center=465.0,
+            name_lines=1,
+            has_yoy=True,
         )
 
-        self.assertEqual(layout["position"], "above")
-        self.assertLessEqual(layout["bottom"], 307.0 - MODULE.LABEL_CLEARANCE)
+        self.assertAlmostEqual(
+            (layout["top"] + layout["bottom"]) / 2.0,
+            465.0,
+        )
+        self.assertLess(layout["name_y"], layout["amount_y"])
+        self.assertLess(layout["amount_y"], layout["yoy_y"])
 
-    def test_keeps_bottom_metrics_above_when_columns_do_not_intersect(self) -> None:
-        layout = MODULE._segment_metric_layout(
-            segment_top=821.0,
-            segment_bottom=859.0,
-            label_left=24.0,
-            label_top=810.0,
-            label_right=255.0,
-            label_bottom=910.0,
-            metric_left=276.0,
-            metric_right=358.0,
+    def test_keeps_two_line_name_block_inside_label_band(self) -> None:
+        layout = MODULE._segment_label_block_layout(
+            center=1000.0,
+            name_lines=2,
+            subtitle_lines=2,
+            has_yoy=True,
         )
 
-        self.assertEqual(layout["position"], "above")
-        self.assertLessEqual(layout["bottom"], 821.0)
-
-    def test_moves_metrics_below_when_two_dimensional_bounds_overlap(self) -> None:
-        layout = MODULE._segment_metric_layout(
-            segment_top=821.0,
-            segment_bottom=859.0,
-            label_left=24.0,
-            label_top=760.0,
-            label_right=300.0,
-            label_bottom=910.0,
-            metric_left=276.0,
-            metric_right=358.0,
-        )
-
-        self.assertEqual(layout["position"], "below")
-        self.assertGreaterEqual(layout["top"], 910.0 + MODULE.LABEL_CLEARANCE)
-        self.assertLessEqual(layout["bottom"], 1025.0)
+        self.assertGreaterEqual(layout["top"], 275.0)
+        self.assertLessEqual(layout["bottom"], 1015.0)
+        self.assertLess(layout["name_y"], layout["subtitle_y"])
+        self.assertLess(layout["subtitle_y"], layout["amount_y"])
+        self.assertLess(layout["amount_y"], layout["yoy_y"])
 
 
 class SegmentRenderRegressionTests(unittest.TestCase):
+    def test_non_compact_segment_metrics_stay_with_names_left_of_buckets(self) -> None:
+        sample_path = (
+            ROOT
+            / "income-statement-sankey/scripts/examples/aapl_q3_fy26_full.json"
+        )
+        data = json.loads(sample_path.read_text())
+        data["period_label"] = "Q1 FY26"
+        data["period_end_label"] = "Ending December 2025"
+        data["segments"] = [
+            {
+                "name": "iPhone",
+                "revenue": 85.269,
+                "yoy_pct": 23.3,
+                "group": "products",
+            },
+            {
+                "name": "Mac",
+                "revenue": 8.386,
+                "yoy_pct": -6.7,
+                "group": "products",
+            },
+            {
+                "name": "iPad",
+                "revenue": 8.595,
+                "yoy_pct": 6.3,
+                "group": "products",
+            },
+            {
+                "name": "Wearables, Home & Accessories",
+                "revenue": 11.493,
+                "yoy_pct": -2.2,
+                "group": "products",
+            },
+            {
+                "name": "Services",
+                "revenue": 30.013,
+                "yoy_pct": 13.9,
+                "group": "services",
+            },
+        ]
+        data["revenue_groups"] = [
+            {
+                "id": "products",
+                "name": "Products",
+                "revenue": 113.743,
+                "yoy_pct": 16.2,
+            },
+            {
+                "id": "services",
+                "name": "Services",
+                "revenue": 30.013,
+                "yoy_pct": 13.9,
+            },
+        ]
+        data["products"] = data["revenue_groups"][0]
+        data["services"] = data["revenue_groups"][1]
+        data["total_revenue"] = {"revenue": 143.756, "yoy_pct": 15.7}
+        captured: dict[str, object] = {}
+        original_figure = MODULE.plt.figure
+
+        def capture_figure(*args, **kwargs):
+            fig = original_figure(*args, **kwargs)
+            captured["fig"] = fig
+            return fig
+
+        try:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                output = Path(tmp_dir) / "aapl-q1.png"
+                with mock.patch.object(MODULE.plt, "figure", side_effect=capture_figure):
+                    with mock.patch.object(MODULE.plt, "close"):
+                        MODULE.render(data, output, dpi=160)
+
+            ax = captured["fig"].axes[0]
+            texts = list(ax.texts)
+            for segment in data["segments"]:
+                expected = [
+                    segment["name"],
+                    MODULE._money(segment["revenue"], data["unit"]),
+                    MODULE._yoy(segment.get("yoy_pct")),
+                ]
+                artists = [
+                    min(
+                        (
+                            text
+                            for text in texts
+                            if " ".join(text.get_text().split()) == value
+                        ),
+                        key=lambda text: float(text.get_position()[0]),
+                    )
+                    for value in expected
+                    if value
+                ]
+                x_positions = {round(float(text.get_position()[0]), 1) for text in artists}
+                y_positions = [float(text.get_position()[1]) for text in artists]
+
+                self.assertEqual(x_positions, {255.0})
+                self.assertTrue(all(x < 290.0 for x in x_positions))
+                self.assertEqual(y_positions, sorted(y_positions))
+                self.assertLessEqual(y_positions[-1] - y_positions[0], 105.0)
+        finally:
+            fig = captured.get("fig")
+            if fig is not None:
+                MODULE.plt.close(fig)
+
     def test_long_three_segment_labels_do_not_touch_canvas_edge(self) -> None:
         sample_path = (
             ROOT
@@ -511,14 +597,12 @@ class SegmentRenderRegressionTests(unittest.TestCase):
                             dark_edge_pixels += 1
                 self.assertEqual(dark_edge_pixels, 0)
 
-            for band_top, band_bottom in ((145, 220), (465, 540), (740, 805)):
-                xs = []
-                for y in range(band_top, band_bottom):
-                    for x in range(265, 370):
-                        if max(image.getpixel((x, y))) < 125:
-                            xs.append(x)
-                self.assertTrue(xs)
-                self.assertAlmostEqual((min(xs) + max(xs)) / 2, 317.0, delta=8.0)
+            dark_gap_pixels = 0
+            for y in range(275, 1015):
+                for x in range(260, 285):
+                    if max(image.getpixel((x, y))) < 125:
+                        dark_gap_pixels += 1
+            self.assertEqual(dark_gap_pixels, 0)
 
 
 if __name__ == "__main__":

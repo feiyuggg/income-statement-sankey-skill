@@ -143,10 +143,11 @@ quarter-specific extraction, and every JSON must validate before deployment.
 - Preserve the reference flow: segments -> revenue group -> total revenue ->
   gross profit/cost of revenue -> operating profit/operating expenses -> net
   profit/tax/other/R&D/SG&A.
-- Keep official segment names intact. The renderer constrains long left-column
-  labels to the available pixel width, centers amount/YoY blocks on their source
-  bars, and moves those blocks only when complete two-dimensional bounds collide.
-  Do not manually shorten names merely to hide clipping or overlap.
+- Keep official segment names intact. For non-compact segment layouts, treat the
+  name, optional subtitle, amount, and YoY as one vertically stacked label block
+  in the lane left of the source bar; never center only the amount/YoY on the
+  bar. Constrain long labels to the available width instead of manually
+  shortening names merely to hide clipping or overlap.
 - Use black revenue bars, gray revenue ribbons, green profit ribbons, and red
   cost ribbons on a light-gray background.
 - Use direct labels, not floating cards.
