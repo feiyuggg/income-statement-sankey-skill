@@ -1861,6 +1861,8 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
     net_height = height(net_value)
     net_is_loss = net_value < 0
     aggregate_operating_loss = net_is_loss and operating_value < 0
+    tax_benefit = abs(tax_value) if tax_value < 0 else 0.0
+    tax_benefit_height = height(tax_benefit, 11) if tax_benefit > 0 else 0.0
     tax_height = height(tax_value, 11) if tax_value > 0 else 0.0
     tax_accounting_height = height(tax_value) if tax_value > 0 else 0.0
     other_outflow_height = (
@@ -1920,7 +1922,98 @@ def render(data: dict[str, Any], out_path: Path, dpi: int = 100) -> Path:
         **_font(18),
     )
 
-    if aggregate_operating_loss:
+    if tax_benefit > 0 and net_value > 0 and other_inflow:
+        other_source_top = float(right_layout["other_source_top"])
+        _bar(
+            ax,
+            x_operating,
+            other_source_top,
+            operating_width,
+            other_height,
+            GREEN_BAR,
+        )
+        offsetting_loss = min(max(other_value, 0.0), abs(min(operating_value, 0.0)))
+        residual_other = max(other_value - offsetting_loss, 0.0)
+        tax_benefit_top = max(net_bottom + 105.0, 500.0)
+        x_tax_benefit = x_source + (x_final - x_source) * 0.36
+        tax_benefit_width = 48.0
+        _bar(
+            ax,
+            x_tax_benefit,
+            tax_benefit_top,
+            tax_benefit_width,
+            tax_benefit_height,
+            GREEN_BAR,
+        )
+        source_entries = []
+        if residual_other > 0:
+            residual_height = height(residual_other)
+            source_entries.append(
+                (
+                    x_source,
+                    other_source_top + max(other_height - residual_height, 0.0),
+                    residual_height,
+                    residual_height,
+                )
+            )
+        source_entries.append(
+            (
+                x_tax_benefit + tax_benefit_width,
+                tax_benefit_top,
+                tax_benefit_height,
+                height(tax_benefit),
+            )
+        )
+        destination_spans = _bounded_stacked_spans(
+            net_top,
+            net_bottom,
+            [entry[3] for entry in source_entries],
+        )
+        for source, destination_span in zip(source_entries, destination_spans):
+            _ribbon(
+                ax,
+                source[0],
+                source[1],
+                source[1] + source[2],
+                x_final,
+                destination_span[0],
+                destination_span[1],
+                GREEN_FLOW,
+            )
+        other_center = other_source_top + other_height / 2
+        ax.text(
+            x_operating - 18,
+            other_center - 17,
+            "Other income",
+            ha="right",
+            color=GREEN,
+            **_font(15, "bold"),
+        )
+        ax.text(
+            x_operating - 18,
+            other_center + 18,
+            _money(other_value, unit),
+            ha="right",
+            color=GREEN,
+            **_font(14),
+        )
+        ax.text(
+            x_tax_benefit + tax_benefit_width / 2,
+            tax_benefit_top - 38,
+            "Tax benefit",
+            ha="center",
+            color=GREEN,
+            **_font(15, "bold"),
+        )
+        ax.text(
+            x_tax_benefit + tax_benefit_width / 2,
+            tax_benefit_top - 8,
+            _money(tax_benefit, unit),
+            ha="center",
+            color=GREEN,
+            **_font(14),
+        )
+    elif aggregate_operating_loss:
         x_other = x_source + (x_final - x_source) * 0.36
         other_width = 48.0
         other_loss_height = (

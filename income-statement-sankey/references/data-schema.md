@@ -112,7 +112,7 @@ Intermediate JSON consumed by `render_sankey.py`.
 | `yoy_pct` | Year-over-year % change of the dollar amount |
 | `margin_pct` | Amount / total_revenue × 100 |
 | `*_yoy_pp` | Year-over-year change in margin/ratio, in percentage **points** |
-| `tax` | Tax provision (drawn as outflow / expense) |
+| `tax` | Tax provision. Positive values draw as an expense outflow; when net income is positive, negative values draw as a green tax-benefit inflow to net profit. |
 | `other_income` | Non-operating other (can be negative) |
 | `net_profit.amount` | Net income is positive; net loss is negative and renders as a red loss node. |
 | `source_records` | Auditable sources with publisher, retrieval date, and HTTPS URL. At least one official or regulatory record is required. The agent must still open and inspect the document; metadata validation cannot prove its contents. |

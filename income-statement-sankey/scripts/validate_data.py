@@ -412,6 +412,29 @@ def validate(data: dict[str, Any], tolerance: float | None = None) -> list[str]:
             group_values.get(group_id),
         )
 
+    segments_by_group: dict[str, list[dict[str, Any]]] = {}
+    for segment in segments:
+        if not isinstance(segment, dict):
+            continue
+        group_id = str(segment.get("group") or "").strip()
+        if group_id:
+            segments_by_group.setdefault(group_id, []).append(segment)
+    if groups and segments and set(segments_by_group) == group_ids:
+        one_to_one_duplicates = all(
+            len(segments_by_group.get(group_id, [])) == 1
+            and abs(
+                float(segments_by_group[group_id][0].get("revenue") or 0)
+                - group_values.get(group_id, 0.0)
+            )
+            <= tol
+            for group_id in group_ids
+        )
+        if one_to_one_duplicates:
+            errors.append(
+                "segments duplicate revenue_groups one-to-one; omit segments unless "
+                "they provide finer revenue disaggregation"
+            )
+
     gross_profit = _require_number(errors, data, "gross_profit", "amount", positive=True)
     cogs = _require_number(errors, data, "cogs", "amount", positive=True)
     identity(

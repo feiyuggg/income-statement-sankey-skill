@@ -100,6 +100,13 @@ quarter-specific extraction, and every JSON must validate before deployment.
 ## Data rules
 
 - Do not invent segments, totals, YoY, margin changes, logos, or fiscal labels.
+- Do not repeat every revenue group as an identical one-to-one segment layer.
+  Omit `segments` when they do not provide finer disaggregation than
+  `revenue_groups`; validation rejects this duplicated-bucket pattern.
+- Preserve a reported negative tax provision as a tax benefit. When reported
+  net income remains positive, the standard renderer draws the benefit as a
+  green inflow to net profit rather than silently dropping it or recoloring
+  net profit as a loss.
 - Standard-layout companies may report an operating loss. Preserve the negative
   `operating_profit.amount`; the validator accepts it when the income-statement
   identities reconcile. Do not replace a reported operating loss with zero or a
